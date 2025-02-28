@@ -22,14 +22,15 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {promisify} from 'util';
+import {promisify} from 'node:util';
 
 import * as express from 'express';
 import request from 'request';
 
-import {logger} from '../logger';
+import {logger} from '../logger.js';
+import {CompilerProps} from '../properties.js';
 
-import {StorageBase} from './base';
+import {ExpandedShortLink, StorageBase} from './base.js';
 
 export class StorageRemote extends StorageBase {
     static get key() {
@@ -40,10 +41,10 @@ export class StorageRemote extends StorageBase {
     protected readonly get: (uri: string, options?: request.CoreOptions) => Promise<request.Response>;
     protected readonly post: (uri: string, options?: request.CoreOptions) => Promise<request.Response>;
 
-    constructor(httpRootDir, compilerProps) {
+    constructor(httpRootDir: string, compilerProps: CompilerProps) {
         super(httpRootDir, compilerProps);
 
-        this.baseUrl = compilerProps.ceProps('remoteStorageServer');
+        this.baseUrl = compilerProps.ceProps('remoteStorageServer') as string;
 
         const req = request.defaults({
             baseUrl: this.baseUrl,
@@ -85,7 +86,7 @@ export class StorageRemote extends StorageBase {
         res.send({url: shortlink});
     }
 
-    async expandId(id) {
+    async expandId(id: string): Promise<ExpandedShortLink> {
         const resp = await this.get(`/api/shortlinkinfo/${id}`);
 
         if (resp.statusCode !== 200) throw new Error(`ID ${id} not present in remote storage`);

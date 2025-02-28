@@ -22,11 +22,11 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {UnprocessedExecResult} from '../../types/execution/execution.interfaces';
-import * as exec from '../exec';
+import type {UnprocessedExecResult} from '../../types/execution/execution.interfaces.js';
+import * as exec from '../exec.js';
 
-import {BaseFormatter} from './base';
-import {FormatOptions} from './base.interfaces';
+import type {FormatOptions} from './base.interfaces.js';
+import {BaseFormatter} from './base.js';
 
 export class RustFmtFormatter extends BaseFormatter {
     static get key() {
@@ -41,6 +41,9 @@ export class RustFmtFormatter extends BaseFormatter {
             `hard_tabs=${options.useSpaces ? 'false' : 'true'}`,
             '--config',
             `tab_spaces=${options.tabWidth}`,
+            // Force edition 2021 to support most modern syntax features
+            '--edition',
+            '2021',
         ];
         return await exec.execute(this.formatterInfo.exe, args, {input: source});
     }

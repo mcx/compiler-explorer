@@ -24,16 +24,19 @@
 
 import $ from 'jquery';
 
-const monaco = require('monaco-editor');
-const cpp = require('monaco-editor/esm/vs/basic-languages/cpp/cpp');
-const cppp = require('./cppp-mode');
+import * as monaco from 'monaco-editor';
+
+// @ts-ignore  "Could not find a declaration file"
+import * as cpp from 'monaco-editor/esm/vs/basic-languages/cpp/cpp';
+
+import cppp from './cppp-mode.js';
 
 // We need to create a new definition for C++ for OpenCL so we can remove invalid keywords
 
-function definition() {
+function definition(): monaco.languages.IMonarchLanguage {
     const cppForOpenCL = $.extend(true, {}, cppp); // deep copy
 
-    function addKeywords(keywords) {
+    function addKeywords(keywords: string[]) {
         // (Ruben) Done one by one as if you just push them all, Monaco complains that they're not strings, but as
         // far as I can tell, they indeed are all strings. This somehow fixes it. If you know how to fix it, plz go
         for (let i = 0; i < keywords.length; ++i) {
@@ -41,7 +44,7 @@ function definition() {
         }
     }
 
-    function vectorTypes(basename) {
+    function vectorTypes(basename: string) {
         return [basename + '2', basename + '3', basename + '4', basename + '8', basename + '16'];
     }
     // Keywords for C++ for OpenCL
@@ -110,5 +113,3 @@ function definition() {
 monaco.languages.register({id: 'cpp-for-opencl'});
 monaco.languages.setLanguageConfiguration('cpp-for-opencl', cpp.conf);
 monaco.languages.setMonarchTokensProvider('cpp-for-opencl', definition());
-
-export {};

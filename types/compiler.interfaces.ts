@@ -22,44 +22,84 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {CompilerArguments} from '../lib/compiler-arguments';
+import {AllCompilerOverrideOptions} from './compilation/compiler-overrides.interfaces.js';
+import {PossibleRuntimeTools} from './execution/execution.interfaces.js';
+import {InstructionSet} from './instructionsets.js';
+import {LanguageKey} from './languages.interfaces.js';
+import {Library} from './libraries/libraries.interfaces.js';
+import {Tool, ToolInfo} from './tool.interfaces.js';
 
-import {Language} from './languages.interfaces';
-import {Library} from './libraries/libraries.interfaces';
-import {Tool, ToolInfo} from './tool.interfaces';
+export type Remote = {
+    target: string;
+    path: string;
+    cmakePath: string;
+    basePath: string;
+};
 
 export type CompilerInfo = {
     id: string;
     exe: string;
     name: string;
+    version: string;
+    fullVersion: string;
+    baseName: string;
     alias: string[];
     options: string;
-    versionFlag?: string;
+    versionFlag: string[] | undefined;
     versionRe?: string;
     explicitVersion?: string;
     compilerType: string;
+    // groups are more fine-grained, e.g. gcc x86-64, gcc arm, clang x86-64, ...
+    // category is more broad: gcc, clang, msvc, ...
+    compilerCategories?: string[];
     debugPatched: boolean;
     demangler: string;
     demanglerType: string;
+    demanglerArgs: string[];
     objdumper: string;
     objdumperType: string;
+    objdumperArgs: string[];
     intelAsm: string;
     supportsAsmDocs: boolean;
-    instructionSet: string;
+    instructionSet: InstructionSet | null;
     needsMulti: boolean;
     adarts: string;
-    supportsDeviceAsmView: boolean;
-    supportsDemangle: boolean;
-    supportsBinary: boolean;
-    supportsBinaryObject: boolean;
-    supportsIntel: boolean;
-    interpreted: boolean;
+    supportsDeviceAsmView?: boolean;
+    supportsDemangle?: boolean;
+    supportsVerboseDemangling?: boolean;
+    supportsBinary?: boolean;
+    supportsBinaryObject?: boolean;
+    supportsIntel?: boolean;
+    emulated?: boolean;
+    interpreted?: boolean;
     // (interpreted || supportsBinary) && supportsExecute
-    supportsExecute: boolean;
+    supportsExecute?: boolean;
+    supportsGccDump?: boolean;
+    supportsFiltersInBinary?: boolean;
+    supportsOptOutput?: boolean;
+    supportsVerboseAsm?: boolean;
+    supportsStackUsageOutput?: boolean;
+    supportsPpView?: boolean;
+    supportsAstView?: boolean;
+    supportsIrView?: boolean;
+    supportsClangirView?: boolean;
+    supportsRustMirView?: boolean;
+    supportsRustMacroExpView?: boolean;
+    supportsRustHirView?: boolean;
+    supportsHaskellCoreView?: boolean;
+    supportsHaskellStgView?: boolean;
+    supportsHaskellCmmView?: boolean;
+    supportsCfg?: boolean;
+    supportsGnatDebugViews?: boolean;
+    supportsLibraryCodeFilter?: boolean;
+    supportsMarch?: boolean;
+    supportsTarget?: boolean;
+    supportsTargetIs?: boolean;
+    supportsHyphenTarget?: boolean;
     executionWrapper: string;
-    supportsLibraryCodeFilter: boolean;
+    executionWrapperArgs: string[];
     postProcess: string[];
-    lang: string;
+    lang: LanguageKey;
     group: string;
     groupName: string;
     includeFlag: string;
@@ -69,31 +109,55 @@ export type CompilerInfo = {
     libpathFlag: string;
     libPath: string[];
     ldPath: string[];
+    extraPath: string[];
     // [env, setting][]
     envVars: [string, string][];
     notification: string;
     isSemVer: boolean;
     semver: string;
+    isNightly: boolean;
     libsArr: Library['id'][];
     tools: Record<ToolInfo['id'], Tool>;
     unwiseOptions: string[];
     hidden: boolean;
-    buildenvsetup: {
+    buildenvsetup?: {
         id: string;
-        props: (name: string, def: string) => string;
+        props: (name: string, def?: any) => any;
     };
     license?: {
         link?: string;
         name?: string;
         preamble?: string;
+        invasive?: boolean;
     };
+    remote?: Remote;
+    possibleOverrides?: AllCompilerOverrideOptions;
+    possibleRuntimeTools?: PossibleRuntimeTools;
+    disabledFilters: string[];
+    optArg?: string;
+    stackUsageArg?: string;
+    externalparser: any;
+    removeEmptyGccDump?: boolean;
+    irArg?: string[];
+    minIrArgs?: string[];
+    optPipeline?: {
+        groupName?: string;
+        supportedOptions?: string[];
+        supportedFilters?: string[];
+        arg?: string[];
+        moduleScopeArg?: string[];
+        noDiscardValueNamesArg?: string[];
+        monacoLanguage?: string;
+        initialOptionsState?: Record<string, boolean>;
+        initialFiltersState?: Record<string, boolean>;
+    };
+    cachedPossibleArguments?: any;
+    nvdisasm?: string;
+    mtime?: any;
+    $order: number;
 };
 
-export interface ICompiler {
-    possibleArguments: CompilerArguments;
-    lang: Language;
-    compile(source, options, backendOptions, filters, bypassCache, tools, executionParameters, libraries, files);
-    cmake(files, key);
-    initialise(mtime: Date, clientOptions, isPrediscovered: boolean);
-    getInfo();
-}
+// Compiler information collected by the compiler-finder
+export type PreliminaryCompilerInfo = Omit<CompilerInfo, 'version' | 'fullVersion' | 'baseName' | 'disabledFilters'> & {
+    version?: string;
+};

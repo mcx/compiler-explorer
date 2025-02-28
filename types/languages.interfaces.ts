@@ -24,17 +24,26 @@
 
 export type LanguageKey =
     | 'ada'
+    | 'algol68'
     | 'analysis'
+    | 'android-java'
+    | 'android-kotlin'
     | 'assembly'
     | 'c'
     | 'c++'
+    | 'c3'
     | 'carbon'
     | 'circle'
     | 'circt'
     | 'clean'
     | 'cmake'
+    | 'cmakescript'
+    | 'cobol'
+    | 'coccinelle_for_c'
+    | 'coccinelle_for_cpp'
     | 'cpp_for_opencl'
     | 'cppx'
+    | 'snowball'
     | 'cppx_blue'
     | 'cppx_gold'
     | 'cpp2_cppfront'
@@ -43,21 +52,34 @@ export type LanguageKey =
     | 'cuda'
     | 'd'
     | 'dart'
+    | 'elixir'
     | 'erlang'
     | 'fortran'
     | 'fsharp'
+    | 'gimple'
+    | 'glsl'
     | 'go'
     | 'haskell'
     | 'hlsl'
     | 'hook'
+    | 'hylo'
     | 'ispc'
+    | 'il'
     | 'jakt'
     | 'java'
+    | 'julia'
+    | 'javascript'
     | 'kotlin'
     | 'llvm'
+    | 'llvm_mir'
     | 'mlir'
+    | 'modula2'
     | 'nim'
+    | 'numba'
     | 'ocaml'
+    | 'odin'
+    | 'objc'
+    | 'objc++'
     | 'openclc'
     | 'pascal'
     | 'pony'
@@ -66,12 +88,22 @@ export type LanguageKey =
     | 'ruby'
     | 'rust'
     | 'scala'
+    | 'slang'
     | 'solidity'
+    | 'spice'
+    | 'spirv'
+    | 'sway'
     | 'swift'
+    | 'tablegen'
     | 'toit'
     | 'typescript'
+    | 'v'
+    | 'vala'
     | 'vb'
-    | 'zig';
+    | 'vyper'
+    | 'wasm'
+    | 'zig'
+    | 'ylc';
 
 export interface Language {
     /** Id of language. Added programmatically based on CELanguages key */
@@ -92,6 +124,10 @@ export interface Language {
     logoUrl: string | null;
     /** Path in /views/resources/logos to the logo of the language for dark mode use */
     logoUrlDark: string | null;
+    /** Data from webpack */
+    logoData?: any;
+    /** Data from webpack */
+    logoDataDark?: any;
     /** Example code to show in the language's editor */
     example: string;
     previewFilter: RegExp | null;
@@ -99,4 +135,7 @@ export interface Language {
     monacoDisassembly: string | null;
     /** Brief description of the language */
     tooltip?: string;
+    /** Default compiler for the language. This is populated when handed to the frontend. */
+    defaultCompiler?: string;
+    digitSeparator?: string;
 }

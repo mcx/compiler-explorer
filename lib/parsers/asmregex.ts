@@ -22,7 +22,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import * as utils from '../utils';
+import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import * as utils from '../utils.js';
 
 const findQuotes = /(.*?)("(?:[^"\\]|\\.)*")(.*)/;
 
@@ -33,20 +34,20 @@ export class AsmRegex {
         this.labelDef = /^(?:.proc\s+)?([\w$.@]+):/i;
     }
 
-    static squashHorizontalWhitespace(line, atStart) {
+    static squashHorizontalWhitespace(line: string, atStart: boolean): string {
         const quotes = line.match(findQuotes);
         if (quotes) {
             return (
-                this.squashHorizontalWhitespace(quotes[1], atStart) +
+                AsmRegex.squashHorizontalWhitespace(quotes[1], atStart) +
                 quotes[2] +
-                this.squashHorizontalWhitespace(quotes[3], false)
+                AsmRegex.squashHorizontalWhitespace(quotes[3], false)
             );
         }
         return utils.squashHorizontalWhitespace(line, atStart);
     }
 
-    static filterAsmLine(line, filters) {
+    static filterAsmLine(line: string, filters: ParseFiltersAndOutputOptions): string {
         if (!filters.trim) return line;
-        return this.squashHorizontalWhitespace(line, true);
+        return AsmRegex.squashHorizontalWhitespace(line, true);
     }
 }

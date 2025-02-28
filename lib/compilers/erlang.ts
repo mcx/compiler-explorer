@@ -22,12 +22,12 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
-import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces';
-import {BaseCompiler} from '../base-compiler';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {BaseCompiler} from '../base-compiler.js';
 
-import {ErlangParser} from './argument-parsers';
+import {ErlangParser} from './argument-parsers.js';
 
 export class ErlangCompiler extends BaseCompiler {
     static get key() {
@@ -65,7 +65,7 @@ export class ErlangCompiler extends BaseCompiler {
         return path.join(dirPath, `${outputFilebase}.S`);
     }
 
-    override getArgumentParser() {
+    override getArgumentParserClass() {
         return ErlangParser;
     }
 }

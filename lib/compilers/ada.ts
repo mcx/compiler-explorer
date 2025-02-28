@@ -23,29 +23,40 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
-import fs from 'fs-extra';
-
-import {CompilationResult, ExecutionOptions} from '../../types/compilation/compilation.interfaces';
-import {BaseCompiler} from '../base-compiler';
-import * as utils from '../utils';
+import {splitArguments} from '../../shared/common-utils.js';
+import type {ConfiguredOverrides} from '../../types/compilation/compiler-overrides.interfaces.js';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {SelectedLibraryVersion} from '../../types/libraries/libraries.interfaces.js';
+import {unwrap} from '../assert.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {CompilationEnvironment} from '../compilation-env.js';
 
 export class AdaCompiler extends BaseCompiler {
     static get key() {
         return 'ada';
     }
 
-    constructor(info, env) {
+    constructor(info: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(info, env);
+
+        this.outputFilebase = 'example';
+
         this.compiler.supportsGccDump = true;
         this.compiler.removeEmptyGccDump = true;
+
+        // this is not showing-up in the --help, so argument parser doesn't
+        // automatically detect the support.
+        this.compiler.stackUsageArg = '-fstack-usage';
+        this.compiler.supportsStackUsageOutput = true;
 
         // used for all GNAT related panes (Expanded code, Tree)
         this.compiler.supportsGnatDebugViews = true;
     }
 
-    override getExecutableFilename(dirPath) {
+    override getExecutableFilename(dirPath: string, outputFilebase: string) {
         // The name here must match the value used in the pragma Source_File
         // in the user provided source.
         return path.join(dirPath, 'example');
@@ -61,16 +72,24 @@ export class AdaCompiler extends BaseCompiler {
         // - "foo.o" may be used by intermediary file, so "-o foo.o" will not
         //   work if building an executable.
 
-        if (key && key.filters && key.filters.binary) {
+        if (key?.filters?.binary) {
             return path.join(dirPath, 'example');
-        } else if (key && key.filters && key.filters.binaryObject) {
-            return path.join(dirPath, 'example.o');
-        } else {
-            return path.join(dirPath, 'example.s');
         }
+        if (key?.filters?.binaryObject) {
+            return path.join(dirPath, 'example.o');
+        }
+        return path.join(dirPath, 'example.s');
     }
 
-    override prepareArguments(userOptions, filters, backendOptions, inputFilename, outputFilename, libraries) {
+    override prepareArguments(
+        userOptions: string[],
+        filters: ParseFiltersAndOutputOptions,
+        backendOptions: Record<string, any>,
+        inputFilename: string,
+        outputFilename: string,
+        libraries: SelectedLibraryVersion[],
+        overrides: ConfiguredOverrides,
+    ) {
         backendOptions = backendOptions || {};
 
         // super call is needed as it handles the GCC Dump files.
@@ -91,6 +110,10 @@ export class AdaCompiler extends BaseCompiler {
 
         if (this.compiler.adarts) {
             gnatmake_opts.push(`--RTS=${this.compiler.adarts}`);
+        }
+
+        if (this.compiler.supportsStackUsageOutput && backendOptions.produceStackUsageInfo) {
+            gnatmake_opts.push(unwrap(this.compiler.stackUsageArg));
         }
 
         if (!filters.execute && backendOptions.produceGnatDebug && this.compiler.supportsGnatDebugViews)
@@ -147,17 +170,20 @@ export class AdaCompiler extends BaseCompiler {
         // in the correct list.
 
         let part = 0; // 0: gnatmake, 1: compiler, 2: linker, 3: binder
-        for (const a of backend_opts.concat(utils.splitArguments(this.compiler.options), userOptions)) {
+        for (const a of backend_opts.concat(splitArguments(this.compiler.options), userOptions)) {
             if (a === '-cargs') {
                 part = 1;
                 continue;
-            } else if (a === '-largs') {
+            }
+            if (a === '-largs') {
                 part = 2;
                 continue;
-            } else if (a === '-bargs') {
+            }
+            if (a === '-bargs') {
                 part = 3;
                 continue;
-            } else if (a === '-margs') {
+            }
+            if (a === '-margs') {
                 part = 0;
                 continue;
             }

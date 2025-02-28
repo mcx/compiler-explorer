@@ -22,88 +22,97 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {ParseFiltersAndOutputOptions} from '../types/features/filters.interfaces';
-import {GccDumpViewState} from './panes/gccdump-view.interfaces';
+import {ParseFiltersAndOutputOptions} from '../types/features/filters.interfaces.js';
+import {GccDumpViewState} from './panes/gccdump-view.interfaces.js';
 
+import {ConfiguredOverrides} from './compilation/compiler-overrides.interfaces.js';
 import {
-    EmptyCompilerState,
-    ComponentConfig,
-    PopulatedCompilerState,
-    CompilerForTreeState,
-    EmptyExecutorState,
-    PopulatedExecutorState,
-    ExecutorForTreeState,
-    EmptyEditorState,
-    PopulatedEditorState,
-    EmptyTreeState,
-    OutputState,
-    ToolViewState,
-    EmptyToolInputViewState,
-    PopulatedToolInputViewState,
-    PopulatedOptViewState,
-    EmptyOptViewState,
-    EmptyFlagsViewState,
-    PopulatedFlagsViewState,
-    EmptyDiffViewState,
-    PopulatedDiffViewState,
-    EmptyPpViewState,
-    PopulatedPpViewState,
-    EmptyAstViewState,
-    PopulatedAstViewState,
-    EmptyGccDumpViewState,
-    PopulatedGccDumpViewState,
-    EmptyCfgViewState,
-    PopulatedCfgViewState,
-    PopulatedConformanceViewState,
-    EmptyIrViewState,
-    PopulatedIrViewState,
-    EmptyRustMirViewState,
-    PopulatedRustMirViewState,
-    EmptyHaskellCoreViewState,
-    PopulatedHaskellCoreViewState,
-    EmptyHaskellStgViewState,
-    PopulatedHaskellStgViewState,
-    EmptyHaskellCmmViewState,
-    PopulatedHaskellCmmViewState,
-    EmptyGnatDebugTreeViewState,
-    PopulatedGnatDebugTreeViewState,
-    EmptyGnatDebugViewState,
-    PopulatedGnatDebugViewState,
-    EmptyRustMacroExpViewState,
-    PopulatedRustMacroExpViewState,
-    EmptyRustHirViewState,
-    PopulatedRustHirViewState,
-    EmptyDeviceViewState,
-    PopulatedDeviceViewState,
-    COMPILER_COMPONENT_NAME,
-    EXECUTOR_COMPONENT_NAME,
-    EDITOR_COMPONENT_NAME,
-    TREE_COMPONENT_NAME,
-    OUTPUT_COMPONENT_NAME,
-    TOOL_COMPONENT_NAME,
-    TOOL_INPUT_VIEW_COMPONENT_NAME,
-    DIFF_VIEW_COMPONENT_NAME,
-    OPT_VIEW_COMPONENT_NAME,
-    FLAGS_VIEW_COMPONENT_NAME,
-    PP_VIEW_COMPONENT_NAME,
     AST_VIEW_COMPONENT_NAME,
-    GCC_DUMP_VIEW_COMPONENT_NAME,
     CFG_VIEW_COMPONENT_NAME,
+    CLANGIR_VIEW_COMPONENT_NAME,
+    COMPILER_COMPONENT_NAME,
     CONFORMANCE_VIEW_COMPONENT_NAME,
-    IR_VIEW_COMPONENT_NAME,
-    RUST_MIR_VIEW_COMPONENT_NAME,
-    HASKELL_CORE_VIEW_COMPONENT_NAME,
-    HASKELL_STG_VIEW_COMPONENT_NAME,
-    HASKELL_CMM_VIEW_COMPONENT_NAME,
+    CompilerForTreeState,
+    ComponentConfig,
+    DEVICE_VIEW_COMPONENT_NAME,
+    DIFF_VIEW_COMPONENT_NAME,
+    EDITOR_COMPONENT_NAME,
+    EXECUTOR_COMPONENT_NAME,
+    EmptyAstViewState,
+    EmptyCfgViewState,
+    EmptyClangirViewState,
+    EmptyCompilerState,
+    EmptyDeviceViewState,
+    EmptyDiffViewState,
+    EmptyEditorState,
+    EmptyExecutorState,
+    EmptyFlagsViewState,
+    EmptyGccDumpViewState,
+    EmptyGnatDebugTreeViewState,
+    EmptyGnatDebugViewState,
+    EmptyHaskellCmmViewState,
+    EmptyHaskellCoreViewState,
+    EmptyHaskellStgViewState,
+    EmptyIrViewState,
+    EmptyOptPipelineViewState,
+    EmptyOptViewState,
+    EmptyPpViewState,
+    EmptyRustHirViewState,
+    EmptyRustMacroExpViewState,
+    EmptyRustMirViewState,
+    EmptyStackUsageViewState,
+    EmptyToolInputViewState,
+    EmptyTreeState,
+    ExecutorForTreeState,
+    FLAGS_VIEW_COMPONENT_NAME,
+    GCC_DUMP_VIEW_COMPONENT_NAME,
     GNAT_DEBUG_TREE_VIEW_COMPONENT_NAME,
     GNAT_DEBUG_VIEW_COMPONENT_NAME,
-    RUST_MACRO_EXP_VIEW_COMPONENT_NAME,
+    HASKELL_CMM_VIEW_COMPONENT_NAME,
+    HASKELL_CORE_VIEW_COMPONENT_NAME,
+    HASKELL_STG_VIEW_COMPONENT_NAME,
+    IR_VIEW_COMPONENT_NAME,
+    OPT_PIPELINE_VIEW_COMPONENT_NAME,
+    OPT_VIEW_COMPONENT_NAME,
+    OUTPUT_COMPONENT_NAME,
+    OutputState,
+    PP_VIEW_COMPONENT_NAME,
+    PopulatedAstViewState,
+    PopulatedCfgViewState,
+    PopulatedClangirViewState,
+    PopulatedCompilerState,
+    PopulatedConformanceViewState,
+    PopulatedDeviceViewState,
+    PopulatedDiffViewState,
+    PopulatedEditorState,
+    PopulatedExecutorState,
+    PopulatedFlagsViewState,
+    PopulatedGccDumpViewState,
+    PopulatedGnatDebugTreeViewState,
+    PopulatedGnatDebugViewState,
+    PopulatedHaskellCmmViewState,
+    PopulatedHaskellCoreViewState,
+    PopulatedHaskellStgViewState,
+    PopulatedIrViewState,
+    PopulatedOptPipelineViewState,
+    PopulatedOptViewState,
+    PopulatedPpViewState,
+    PopulatedRustHirViewState,
+    PopulatedRustMacroExpViewState,
+    PopulatedRustMirViewState,
+    PopulatedStackUsageViewState,
+    PopulatedToolInputViewState,
     RUST_HIR_VIEW_COMPONENT_NAME,
-    DEVICE_VIEW_COMPONENT_NAME,
-    LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME,
-    EmptyLLVMOptPipelineViewState,
-    PopulatedLLVMOptPipelineViewState,
-} from './components.interfaces';
+    RUST_MACRO_EXP_VIEW_COMPONENT_NAME,
+    RUST_MIR_VIEW_COMPONENT_NAME,
+    STACK_USAGE_VIEW_COMPONENT_NAME,
+    TOOL_COMPONENT_NAME,
+    TOOL_INPUT_VIEW_COMPONENT_NAME,
+    TREE_COMPONENT_NAME,
+    ToolViewState,
+} from './components.interfaces.js';
+import {ConfiguredRuntimeTools} from './execution/execution.interfaces.js';
+import {LanguageKey} from './languages.interfaces.js';
 
 /** Get an empty compiler component. */
 export function getCompiler(editorId: number, lang: string): ComponentConfig<EmptyCompilerState> {
@@ -127,11 +136,11 @@ export function getCompiler(editorId: number, lang: string): ComponentConfig<Emp
  */
 export function getCompilerWith(
     editorId: number,
-    filters: ParseFiltersAndOutputOptions,
+    filters: ParseFiltersAndOutputOptions | undefined,
     options: unknown,
     compilerId: string,
     langId?: string,
-    libs?: unknown
+    libs?: unknown,
 ): ComponentConfig<PopulatedCompilerState> {
     return {
         type: 'component',
@@ -167,6 +176,8 @@ export function getExecutor(editorId: number, lang: string): ComponentConfig<Emp
         componentState: {
             source: editorId,
             lang,
+            compilationPanelShown: true,
+            compilerOutShown: true,
         },
     };
 }
@@ -176,9 +187,11 @@ export function getExecutorWith(
     editorId: number,
     lang: string,
     compilerId: string,
-    libraries: unknown,
-    compilerArgs,
-    treeId: number
+    libraries: {name: string; ver: string}[],
+    compilerArgs: string | undefined,
+    treeId: number,
+    overrides?: ConfiguredOverrides,
+    runtimeTools?: ConfiguredRuntimeTools,
 ): ComponentConfig<PopulatedExecutorState> {
     return {
         type: 'component',
@@ -190,6 +203,10 @@ export function getExecutorWith(
             libs: libraries,
             options: compilerArgs,
             lang,
+            compilationPanelShown: true,
+            compilerOutShown: true,
+            overrides: overrides,
+            runtimeTools: runtimeTools,
         },
     };
 }
@@ -202,6 +219,8 @@ export function getExecutorForTree(treeId: number, lang: string): ComponentConfi
         componentState: {
             tree: treeId,
             lang,
+            compilationPanelShown: true,
+            compilerOutShown: true,
         },
     };
 }
@@ -211,7 +230,7 @@ export function getExecutorForTree(treeId: number, lang: string): ComponentConfi
  *
  * TODO: main.js calls this with no arguments.
  */
-export function getEditor(id?: number, langId?: string): ComponentConfig<EmptyEditorState> {
+export function getEditor(langId: LanguageKey, id?: number): ComponentConfig<EmptyEditorState> {
     return {
         type: 'component',
         componentName: EDITOR_COMPONENT_NAME,
@@ -226,7 +245,8 @@ export function getEditor(id?: number, langId?: string): ComponentConfig<EmptyEd
 export function getEditorWith(
     id: number,
     source: string,
-    options: ParseFiltersAndOutputOptions
+    options: ParseFiltersAndOutputOptions,
+    langId: string,
 ): ComponentConfig<PopulatedEditorState> {
     return {
         type: 'component',
@@ -235,6 +255,7 @@ export function getEditorWith(
             id,
             source,
             options,
+            lang: langId,
         },
     };
 }
@@ -250,12 +271,13 @@ export function getTree(id?: number): ComponentConfig<EmptyTreeState> {
         componentName: TREE_COMPONENT_NAME,
         componentState: {
             id,
+            cmakeArgs: '-DCMAKE_BUILD_TYPE=Debug',
         },
     };
 }
 
 /** Get an output component with the given configuration. */
-export function getOutput(compiler: string, editor: number, tree: number): ComponentConfig<OutputState> {
+export function getOutput(compiler: number, editor: number, tree: number): ComponentConfig<OutputState> {
     return {
         type: 'component',
         componentName: OUTPUT_COMPONENT_NAME,
@@ -269,19 +291,21 @@ export function getOutput(compiler: string, editor: number, tree: number): Compo
 
 /** Get a tool view component with the given configuration. */
 export function getToolViewWith(
-    compiler: string,
-    editor: number,
+    compilerId: number,
+    compilerName: string,
+    editorid: number,
     toolId: string,
     args: string,
     monacoStdin: boolean,
-    tree: number
+    tree: number,
 ): ComponentConfig<ToolViewState> {
     return {
         type: 'component',
         componentName: TOOL_COMPONENT_NAME,
         componentState: {
-            compiler,
-            editor,
+            id: compilerId,
+            compilerName,
+            editorid,
             toolId,
             args,
             tree,
@@ -301,9 +325,9 @@ export function getToolInputView(): ComponentConfig<EmptyToolInputViewState> {
 
 /** Get a tool input view component with the given configuration. */
 export function getToolInputViewWith(
-    compilerId: string,
+    compilerId: number,
     toolId: string,
-    toolName: string
+    toolName: string,
 ): ComponentConfig<PopulatedToolInputViewState> {
     return {
         type: 'component',
@@ -353,11 +377,11 @@ export function getOptView(): ComponentConfig<EmptyOptViewState> {
 /** Get an opt view with the given configuration. */
 export function getOptViewWith(
     id: number,
-    source: number,
+    source: string,
     optOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedOptViewState> {
     return {
         type: 'component',
@@ -366,6 +390,35 @@ export function getOptViewWith(
             id,
             source,
             optOutput,
+            compilerName,
+            editorid,
+            treeid,
+        },
+    };
+}
+
+export function getStackUsageView(): ComponentConfig<EmptyStackUsageViewState> {
+    return {
+        type: 'component',
+        componentName: STACK_USAGE_VIEW_COMPONENT_NAME,
+        componentState: {},
+    };
+}
+export function getStackUsageViewWith(
+    id: number,
+    source: string,
+    suOutput: unknown,
+    compilerName: string,
+    editorid: number,
+    treeid: number,
+): ComponentConfig<PopulatedStackUsageViewState> {
+    return {
+        type: 'component',
+        componentName: STACK_USAGE_VIEW_COMPONENT_NAME,
+        componentState: {
+            id,
+            source,
+            suOutput,
             compilerName,
             editorid,
             treeid,
@@ -386,7 +439,7 @@ export function getFlagsView(): ComponentConfig<EmptyFlagsViewState> {
 export function getFlagsViewWith(
     id: number,
     compilerName: string,
-    compilerFlags: unknown
+    compilerFlags: unknown,
 ): ComponentConfig<PopulatedFlagsViewState> {
     return {
         type: 'component',
@@ -411,11 +464,11 @@ export function getPpView(): ComponentConfig<EmptyPpViewState> {
 /** Get a preprocessor view with the given configuration. */
 export function getPpViewWith(
     id: number,
-    source: number,
+    source: string,
     ppOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedPpViewState> {
     return {
         type: 'component',
@@ -443,11 +496,11 @@ export function getAstView(): ComponentConfig<EmptyAstViewState> {
 /** Get an ast view with the given configuration. */
 export function getAstViewWith(
     id: number,
-    source: number,
+    source: string,
     astOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedAstViewState> {
     return {
         type: 'component',
@@ -478,7 +531,7 @@ export function getGccDumpViewWith(
     compilerName: string,
     editorid: number,
     treeid: number,
-    gccDumpOutput: GccDumpViewState
+    gccDumpOutput: GccDumpViewState,
 ): ComponentConfig<PopulatedGccDumpViewState> {
     return {
         type: 'component',
@@ -506,16 +559,21 @@ export function getCfgView(): ComponentConfig<EmptyCfgViewState> {
 }
 
 /** Get a cfg view with the given configuration. */
-export function getCfgViewWith(id: number, editorid: number, treeid: number): ComponentConfig<PopulatedCfgViewState> {
+export function getCfgViewWith(
+    id: number,
+    editorid: number,
+    treeid: number,
+    isircfg?: boolean,
+): ComponentConfig<PopulatedCfgViewState> {
     return {
         type: 'component',
         componentName: CFG_VIEW_COMPONENT_NAME,
         componentState: {
             selectedFunction: null,
-            zoom: 1,
             id,
             editorid,
             treeid,
+            isircfg,
         },
     };
 }
@@ -525,7 +583,7 @@ export function getConformanceView(
     editorid: number,
     treeid: number,
     source: string,
-    langId: string
+    langId: string,
 ): ComponentConfig<PopulatedConformanceViewState> {
     return {
         type: 'component',
@@ -555,7 +613,7 @@ export function getIrViewWith(
     irOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedIrViewState> {
     return {
         type: 'component',
@@ -571,31 +629,65 @@ export function getIrViewWith(
     };
 }
 
-/** Get an empty ir view component. */
-export function getLLVMOptPipelineView(): ComponentConfig<EmptyLLVMOptPipelineViewState> {
+export function getClangirView(): ComponentConfig<EmptyClangirViewState> {
     return {
         type: 'component',
-        componentName: LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME,
+        componentName: CLANGIR_VIEW_COMPONENT_NAME,
         componentState: {},
     };
 }
 
-/** Get a ir view with the given configuration. */
-export function getLLVMOptPipelineViewWith(
+export function getClangirViewWith(
     id: number,
+    source: string,
+    clangirOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
-): ComponentConfig<PopulatedLLVMOptPipelineViewState> {
+    treeid: number,
+): ComponentConfig<PopulatedClangirViewState> {
     return {
         type: 'component',
-        componentName: LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME,
+        componentName: CLANGIR_VIEW_COMPONENT_NAME,
         componentState: {
             id,
+            source,
+            clangirOutput,
             compilerName,
             editorid,
             treeid,
-            selectedFunction: '',
+        },
+    };
+}
+
+/** Get an empty opt pipeline view component. */
+export function getOptPipelineView(): ComponentConfig<EmptyOptPipelineViewState> {
+    return {
+        type: 'component',
+        componentName: OPT_PIPELINE_VIEW_COMPONENT_NAME,
+        componentState: {},
+    };
+}
+
+/** Get a opt pipeline view with the given configuration. */
+export function getOptPipelineViewWith(
+    id: number,
+    lang: string,
+    compilerId: string,
+    compilerName: string,
+    editorid: number,
+    treeid: number,
+): ComponentConfig<PopulatedOptPipelineViewState> {
+    return {
+        type: 'component',
+        componentName: OPT_PIPELINE_VIEW_COMPONENT_NAME,
+        componentState: {
+            id,
+            lang,
+            compiler: compilerId,
+            compilerName,
+            editorid,
+            treeid,
+            selectedGroup: '',
             selectedIndex: 0,
             sidebarWidth: 0,
         },
@@ -618,7 +710,7 @@ export function getRustMirViewWith(
     rustMirOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedRustMirViewState> {
     return {
         type: 'component',
@@ -650,7 +742,7 @@ export function getHaskellCoreViewWith(
     haskellCoreOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedHaskellCoreViewState> {
     return {
         type: 'component',
@@ -682,7 +774,7 @@ export function getHaskellStgViewWith(
     haskellStgOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedHaskellStgViewState> {
     return {
         type: 'component',
@@ -713,7 +805,7 @@ export function getHaskellCmmViewWith(
     haskellCmmOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedHaskellCmmViewState> {
     return {
         type: 'component',
@@ -745,7 +837,7 @@ export function getGnatDebugTreeViewWith(
     gnatDebugTreeOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedGnatDebugTreeViewState> {
     return {
         type: 'component',
@@ -777,7 +869,7 @@ export function getGnatDebugViewWith(
     gnatDebugOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedGnatDebugViewState> {
     return {
         type: 'component',
@@ -809,7 +901,7 @@ export function getRustMacroExpViewWith(
     rustMacroExpOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedRustMacroExpViewState> {
     return {
         type: 'component',
@@ -841,7 +933,7 @@ export function getRustHirViewWith(
     rustHirOutput: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedRustHirViewState> {
     return {
         type: 'component',
@@ -873,7 +965,7 @@ export function getDeviceViewWith(
     devices: unknown,
     compilerName: string,
     editorid: number,
-    treeid: number
+    treeid: number,
 ): ComponentConfig<PopulatedDeviceViewState> {
     return {
         type: 'component',

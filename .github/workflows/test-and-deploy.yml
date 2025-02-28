@@ -4,48 +4,78 @@ on: [push, pull_request]
 
 jobs:
   test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Use Node.js 16.x
-        uses: actions/setup-node@v3
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v4
         with:
-          node-version: 16.x
+          node-version: 22.x
+          check-latest: true
+          cache: npm
+      - name: Install prerequisites
+        run: |
+          make prereqs
+          python3 -m pip install numba
+      - name: Run checks
+        run: |
+          npm run lint-check
+          npm run test
+          npm run ts-check
+          python3 ./etc/scripts/util/propscheck.py
+          python3 ./etc/scripts/util/propschecktest.py
+          python3 ./etc/scripts/test_numba_wrapper.py
+      - uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
+
+  build_minimum_support:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.2
+          check-latest: false
           cache: npm
       - name: Install prerequisites
         run: make prereqs
       - name: Run checks
         run: |
-          npm run lint-check
-          npm run ci-test
-          npm run ts-check
-          python3 ./etc/scripts/util/propscheck.py
-      - name: Code coverage
-        run: npm run codecov
+          npm run ts-compile
+          npm run webpack
 
   build_dist:
     if: github.repository_owner == 'compiler-explorer' && github.event_name == 'push'
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     outputs:
       release_name: ${{ steps.build_dist.outputs.release_name }}
       branch: ${{ steps.build_dist.outputs.branch }}
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Use Node.js 16.x
-        uses: actions/setup-node@v3
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v4
         with:
-          node-version: 16.x
+          node-version: 22.x
+          check-latest: true
           cache: npm
       - name: Build distribution
         id: build_dist
         run: etc/scripts/build-dist.sh
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: out/dist-bin
@@ -53,19 +83,21 @@ jobs:
   deploy:
     if: github.repository_owner == 'compiler-explorer' && github.event_name == 'push'
     needs: [test, build_dist]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Use Node.js 16.x
-        uses: actions/setup-node@v3
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v4
         with:
-          node-version: 16.x
+          node-version: 22.x
+          check-latest: true
           cache: npm
       - name: Download the built distribution
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: dist
           path: out/dist-bin
@@ -93,7 +125,19 @@ jobs:
           SOURCE_DIR: out/dist-bin
           DEST_DIR: dist/gh/${{ needs.build_dist.outputs.branch }}
       - name: Tag the commit
-        uses: tvdias/github-tagger@v0.0.2
+        uses: actions/github-script@v7
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          tag: gh-${{ github.run_number }}
+          script: |
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: `refs/tags/gh-${context.runNumber}`,
+              sha: context.sha
+            })
+
+  post_deploy_check:
+    needs: [test, build_dist, deploy]
+    runs-on: [admin]
+    steps:
+      - name: Check hashes for deploy ${{ needs.build_dist.outputs.release_name }} to cdn
+        run: ce --env staging builds check_hashes ${{ needs.build_dist.outputs.release_name }}

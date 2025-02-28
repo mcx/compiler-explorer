@@ -22,29 +22,31 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {Pane} from './pane';
-import * as monaco from 'monaco-editor';
-import $ from 'jquery';
-import _ from 'underscore';
 import * as fileSaver from 'file-saver';
+import $ from 'jquery';
+import * as monaco from 'monaco-editor';
+import _ from 'underscore';
+import {Pane} from './pane.js';
 
-import {CfgState} from './cfg-view.interfaces';
-import {Hub} from '../hub';
 import {Container} from 'golden-layout';
-import {PaneState} from './pane.interfaces';
-import {ga} from '../analytics';
-import * as utils from '../utils';
+import {Hub} from '../hub.js';
+import * as utils from '../utils.js';
+import {CfgState} from './cfg-view.interfaces.js';
+import {PaneState} from './pane.interfaces.js';
 
+import TomSelect from 'tom-select';
+import {escapeHTML} from '../../shared/common-utils.js';
 import {
     AnnotatedCfgDescriptor,
     AnnotatedNodeDescriptor,
-    CfgDescriptor,
     CFGResult,
-} from '../../types/compilation/cfg.interfaces';
-import {GraphLayoutCore} from '../graph-layout-core';
-import * as MonacoConfig from '../monaco-config';
-import TomSelect from 'tom-select';
-import {assert, unwrap} from '../assert';
+    CfgDescriptor,
+} from '../../types/compilation/cfg.interfaces.js';
+import {assert, unwrap} from '../assert.js';
+import {CompilationResult} from '../compilation/compilation.interfaces.js';
+import {CompilerInfo} from '../compiler.interfaces.js';
+import {GraphLayoutCore} from '../graph-layout-core.js';
+import * as MonacoConfig from '../monaco-config.js';
 
 const ColorTable = {
     red: '#FE5D5D',
@@ -63,16 +65,6 @@ const MINZOOM = 0.1;
 
 const EST_COMPRESSION_RATIO = 0.022;
 
-// https://stackoverflow.com/questions/6234773/can-i-escape-html-special-chars-in-javascript
-function escapeSVG(text: string) {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
 function attrs(attributes: Record<string, string | number | null>) {
     return Object.entries(attributes)
         .map(([k, v]) => `${k}="${v}"`)
@@ -84,8 +76,8 @@ function special_round(x: number) {
     if (x === 0) {
         return 0;
     }
-    const p = Math.pow(10, Math.floor(Math.log10(x)));
-    // prettier-ignore
+    const p = 10 ** Math.floor(Math.log10(x));
+    // biome-ignore format: keep as-is for readability
     const candidates = [
         Math.round(x / p) * p - p / 2,
         Math.round(x / p) * p,
@@ -97,13 +89,14 @@ function special_round(x: number) {
 function size_to_human(bytes: number) {
     if (bytes < 1000) {
         return special_round(bytes) + ' B';
-    } else if (bytes < 1_000_000) {
-        return special_round(bytes / 1_000) + ' KB';
-    } else if (bytes < 1_000_000_000) {
-        return special_round(bytes / 1_000_000) + ' MB';
-    } else {
-        return special_round(bytes / 1_000_000_000) + ' GB';
     }
+    if (bytes < 1_000_000) {
+        return special_round(bytes / 1_000) + ' KB';
+    }
+    if (bytes < 1_000_000_000) {
+        return special_round(bytes / 1_000_000) + ' MB';
+    }
+    return special_round(bytes / 1_000_000_000) + ' GB';
 }
 
 export class Cfg extends Pane<CfgState> {
@@ -122,11 +115,20 @@ export class Cfg extends Pane<CfgState> {
     dragStartPosition: Coordinate = {x: 0, y: 0};
     graphDimensions = {width: 0, height: 0};
     functionSelector: TomSelect;
+    resetViewButton: JQuery;
+    zoomOutButton: JQuery;
     results: CFGResult;
     state: CfgState & PaneState;
     layout: GraphLayoutCore;
     bbMap: Record<string, HTMLDivElement> = {};
+    tooltipOpen = false;
     readonly extraTransforms: string;
+    fictitiousGraphContainer: HTMLDivElement;
+    fictitiousBlockContainer: HTMLDivElement;
+    zoom = 1;
+    // Ugly but I don't see another way
+    firstRender = true;
+    contentsAreIr = false;
 
     constructor(hub: Hub, container: Container, state: CfgState & PaneState) {
         if ((state as any).selectedFn) {
@@ -136,13 +138,33 @@ export class Cfg extends Pane<CfgState> {
                 editorid: state.editorid,
                 treeid: state.treeid,
                 selectedFunction: (state as any).selectedFn,
-                zoom: 1,
             };
         }
         super(hub, container, state);
-        this.eventHub.emit('cfgViewOpened', this.compilerInfo.compilerId);
-        this.eventHub.emit('requestFilters', this.compilerInfo.compilerId);
+        this.state = state;
+        this.eventHub.emit('cfgViewOpened', this.compilerInfo.compilerId, this.state.isircfg === true);
         this.eventHub.emit('requestCompiler', this.compilerInfo.compilerId);
+        this.contentsAreIr = !!this.state.isircfg;
+        // This is a workaround for a chrome render bug that's existed since at least 2013
+        // https://github.com/compiler-explorer/compiler-explorer/issues/4421
+        this.extraTransforms = navigator.userAgent.includes('AppleWebKit') ? ' translateZ(0)' : '';
+        this.updateTitle();
+    }
+
+    override getInitialHTML() {
+        return $('#cfg').html();
+    }
+
+    override getDefaultPaneName() {
+        // We need to check if this.state exists because this is called in the super constructor before this is actually
+        // constructed
+        if (this.state?.isircfg) {
+            return 'IR CFG';
+        }
+        return 'CFG';
+    }
+
+    override registerButtons() {
         const selector = this.domRoot.get()[0].getElementsByClassName('function-selector')[0];
         assert(selector instanceof HTMLSelectElement, '.function-selector is not an HTMLSelectElement');
         this.functionSelector = new TomSelect(selector, {
@@ -153,29 +175,21 @@ export class Cfg extends Pane<CfgState> {
             dropdownParent: 'body',
             plugins: ['dropdown_input'],
             sortField: 'title',
-            onChange: e => {
-                this.selectFunction(e as unknown as string);
-            },
+            onChange: (e: string) => this.selectFunction(e),
         });
-        this.state = state;
-        // This is a workaround for a chrome render bug that's existed since at least 2013
-        // https://github.com/compiler-explorer/compiler-explorer/issues/4421
-        this.extraTransforms = navigator.userAgent.indexOf('AppleWebKit') === -1 ? '' : ' translateZ(0)';
-    }
+        this.functionSelector.on('dropdown_close', () => {
+            // scroll back to the selection on the next open
+            const selection = unwrap(this.functionSelector).getOption(this.state.selectedFunction);
+            unwrap(this.functionSelector).setActiveOption(selection);
+        });
 
-    override getInitialHTML() {
-        return $('#cfg').html();
-    }
-
-    override getDefaultPaneName() {
-        return 'CFG';
-    }
-
-    override registerOpeningAnalyticsEvent(): void {
-        ga.proxy('send', {
-            hitType: 'event',
-            eventCategory: 'OpenViewPane',
-            eventAction: 'CFGViewPane',
+        this.resetViewButton = this.domRoot.find('.reset-view');
+        this.resetViewButton.on('click', () => {
+            this.resetView(true);
+        });
+        this.zoomOutButton = this.domRoot.find('.zoom-out');
+        this.zoomOutButton.on('click', () => {
+            this.birdsEyeView();
         });
     }
 
@@ -189,6 +203,30 @@ export class Cfg extends Pane<CfgState> {
         this.exportPNGButton = this.domRoot.find('.export-png').first();
         this.estimatedPNGSize = unwrap(this.exportPNGButton[0].querySelector('.estimated-export-size'));
         this.exportSVGButton = this.domRoot.find('.export-svg').first();
+        this.setupFictitiousGraphContainer();
+    }
+
+    setupFictitiousGraphContainer() {
+        // create a fake .graph-container .graph .block-container where we can compute block dimensions
+        // golden layout sets panes to display:none when they aren't the active tab
+        // create the .graph-container
+        const fictitiousGraphContainer = document.createElement('div');
+        fictitiousGraphContainer.setAttribute('class', 'graph-container');
+        fictitiousGraphContainer.setAttribute('style', 'position: absolute; bottom: 0; right: 0; width: 0; height: 0;');
+        // create the .graph
+        const fictitiousGraph = document.createElement('div');
+        fictitiousGraph.setAttribute('class', 'graph');
+        // create the .block-container
+        const fictitousBlockContainer = document.createElement('div');
+        fictitousBlockContainer.setAttribute('class', 'block-container');
+        // .graph-container -> .graph
+        fictitiousGraphContainer.appendChild(fictitiousGraph);
+        // .graph -> .block-container
+        fictitiousGraph.appendChild(fictitousBlockContainer);
+        // finally append to the body
+        document.body.appendChild(fictitiousGraphContainer);
+        this.fictitiousGraphContainer = fictitiousGraphContainer;
+        this.fictitiousBlockContainer = fictitousBlockContainer;
     }
 
     override registerCallbacks() {
@@ -207,30 +245,28 @@ export class Cfg extends Pane<CfgState> {
         });
         this.graphContainer.addEventListener('mousemove', e => {
             if (this.dragging) {
-                this.currentPosition = {
+                this.setPan({
                     x: e.clientX - this.dragStart.x + this.dragStartPosition.x,
                     y: e.clientY - this.dragStart.y + this.dragStartPosition.y,
-                };
-                this.graphElement.style.left = this.currentPosition.x + 'px';
-                this.graphElement.style.top = this.currentPosition.y + 'px';
+                });
             }
         });
         this.graphContainer.addEventListener('wheel', e => {
-            const delta = DZOOM * -Math.sign(e.deltaY) * Math.max(1, this.state.zoom - 1);
-            const prevZoom = this.state.zoom;
-            this.state.zoom += delta;
-            if (this.state.zoom >= MINZOOM) {
-                this.zoom(this.state.zoom);
+            const delta = DZOOM * -Math.sign(e.deltaY) * Math.max(1, this.zoom - 1);
+            const prevZoom = this.zoom;
+            const zoom = this.zoom + delta;
+            if (zoom >= MINZOOM) {
+                this.setZoom(zoom);
                 const mouseX = e.clientX - this.graphElement.getBoundingClientRect().x;
                 const mouseY = e.clientY - this.graphElement.getBoundingClientRect().y;
                 // Amount that the zoom will offset is mouseX / width before zoom * delta * unzoomed width
                 // And same for y. The width / height terms cancel.
-                this.currentPosition.x -= (mouseX / prevZoom) * delta;
-                this.currentPosition.y -= (mouseY / prevZoom) * delta;
-                this.graphElement.style.left = this.currentPosition.x + 'px';
-                this.graphElement.style.top = this.currentPosition.y + 'px';
+                this.setPan({
+                    x: this.currentPosition.x - (mouseX / prevZoom) * delta,
+                    y: this.currentPosition.y - (mouseY / prevZoom) * delta,
+                });
             } else {
-                this.state.zoom = MINZOOM;
+                this.setZoom(MINZOOM);
             }
             e.preventDefault();
         });
@@ -239,6 +275,15 @@ export class Cfg extends Pane<CfgState> {
         });
         this.exportSVGButton.on('click', () => {
             this.exportSVG();
+        });
+        // Dismiss tooltips if you click elsewhere - trigger: focus isn't working for some reason
+        $('body').on('click', e => {
+            if (this.tooltipOpen) {
+                if (!e.target.classList.contains('fold') && $(e.target).parents('.popover.in').length === 0) {
+                    this.tooltipOpen = false;
+                    $('.fold').popover('hide');
+                }
+            }
         });
     }
 
@@ -250,24 +295,31 @@ export class Cfg extends Pane<CfgState> {
         fileSaver.saveAs(new Blob([this.createSVG()], {type: 'text/plain;charset=utf-8'}), 'cfg.svg');
     }
 
-    override onCompiler(compilerId: number, compiler: any, options: unknown, editorId: number, treeId: number): void {
+    override onCompiler(
+        compilerId: number,
+        compiler: CompilerInfo | null,
+        options: string,
+        editorId: number,
+        treeId: number,
+    ): void {
         if (this.compilerInfo.compilerId !== compilerId) return;
         this.compilerInfo.compilerName = compiler ? compiler.name : '';
         this.compilerInfo.editorId = editorId;
         this.compilerInfo.treeId = treeId;
         this.updateTitle();
-        if (compiler && !compiler.supportsLLVMOptPipelineView) {
+        if (compiler && !compiler.optPipeline) {
             //this.editor.setValue('<LLVM IR output is not supported for this compiler>');
         }
     }
 
-    override onCompileResult(compilerId: number, compiler: any, result: any) {
+    override onCompileResult(compilerId: number, compiler: CompilerInfo, result: CompilationResult) {
         if (this.compilerInfo.compilerId !== compilerId) return;
         this.functionSelector.clear(true);
         this.functionSelector.clearOptions();
-        if (result.cfg) {
-            const cfg = result.cfg as CFGResult;
+        const cfg = this.state.isircfg ? result.irOutput?.cfg : result.cfg;
+        if (cfg) {
             this.results = cfg;
+            this.contentsAreIr = !!this.state.isircfg || !!result.compilationOptions?.includes('-emit-llvm');
             let selectedFunction: string | null = this.state.selectedFunction;
             const keys = Object.keys(cfg);
             if (keys.length === 0) {
@@ -287,7 +339,6 @@ export class Cfg extends Pane<CfgState> {
                     selectedFunction = keys[0];
                 }
                 this.functionSelector.setValue(selectedFunction, true);
-                this.state.selectedFunction = selectedFunction;
             } else {
                 // this.state.selectedFunction won't change, next time the compilation results aren't errors or empty
                 // the selected function will still be the same
@@ -304,7 +355,60 @@ export class Cfg extends Pane<CfgState> {
         for (const node of fn.nodes) {
             const div = document.createElement('div');
             div.classList.add('block');
-            div.innerHTML = await monaco.editor.colorize(node.label, 'asm', MonacoConfig.extendConfig({}));
+            const folded_lines: number[] = [];
+            const raw_lines = node.label.split('\n');
+            const highlighted_asm_untrimmed = await monaco.editor.colorize(
+                raw_lines.join('\n'),
+                this.contentsAreIr ? 'llvm-ir' : 'asm',
+                MonacoConfig.extendConfig({}),
+            );
+            const highlighted_asm = await monaco.editor.colorize(
+                raw_lines
+                    .map((line, i) => {
+                        if (line.length <= 100) {
+                            return line;
+                        }
+                        folded_lines.push(i);
+                        return line.slice(0, 100);
+                    })
+                    .join('\n'),
+                this.contentsAreIr ? 'llvm-ir' : 'asm',
+                MonacoConfig.extendConfig({}),
+            );
+            const untrimmed_lines = highlighted_asm_untrimmed.split('<br/>');
+            const lines = highlighted_asm.split('<br/>');
+            // highlighted asm has a blank line at the end
+            assert(raw_lines.length === untrimmed_lines.length - 1);
+            assert(raw_lines.length === lines.length - 1);
+            for (const i of folded_lines) {
+                lines[i] += `<span class="fold" data-extra="${
+                    untrimmed_lines[i]
+                        .replace(/"/g, '&quot;') // escape double quotes for the attribute
+                        .replace(/\s{2,}/g, '&nbsp;') // clean up occurrences of multiple whitespace
+                        .replace(/>(\s|&nbsp;)<\/span>/, '></span>') // Hacky solution to remove whitespace at the start
+                }" aria-describedby="wtf">&#8943;</span>`;
+            }
+            div.innerHTML = lines.join('<br/>');
+            for (const fold of div.getElementsByClassName('fold')) {
+                $(fold)
+                    .popover({
+                        content: unwrap(fold.getAttribute('data-extra')),
+                        html: true,
+                        placement: 'top',
+                        template:
+                            '<div class="popover cfg-fold-popover" role="tooltip">' +
+                            '<div class="arrow"></div>' +
+                            '<h3 class="popover-header"></h3>' +
+                            '<div class="popover-body"></div>' +
+                            '</div>',
+                    })
+                    .on('show.bs.popover', () => {
+                        this.tooltipOpen = true;
+                    })
+                    .on('hide.bs.popover', () => {
+                        this.tooltipOpen = false;
+                    });
+            }
             // So because this is async there's a race condition here if you rapidly switch functions.
             // This can be triggered by loading an example program. Because the fix going to be tricky I'll defer
             // to another PR. TODO(jeremy-rifkin)
@@ -313,11 +417,16 @@ export class Cfg extends Pane<CfgState> {
             this.blockContainer.appendChild(div);
         }
         for (const node of fn.nodes) {
-            const elem = $(this.bbMap[node.id]);
-            void this.bbMap[node.id].offsetHeight;
+            const fictitiousBlock = this.fictitiousBlockContainer.appendChild(
+                this.bbMap[node.id].cloneNode(true),
+            ) as HTMLDivElement;
+            const elem = $(fictitiousBlock);
+            void fictitiousBlock.offsetHeight; // try to trigger a layout recompute
             (node as AnnotatedNodeDescriptor).width = unwrap(elem.outerWidth());
             (node as AnnotatedNodeDescriptor).height = unwrap(elem.outerHeight());
         }
+        // remove all children
+        this.fictitiousBlockContainer.replaceChildren();
     }
 
     drawEdges() {
@@ -388,9 +497,10 @@ export class Cfg extends Pane<CfgState> {
         }
     }
 
-    // display the cfg for the specified function if it exists
-    // this function does not change or use this.state.selectedFunction
+    // Display the cfg for the specified function if it exists
+    // This function sets this.state.selectedFunction if the input is non-null and valid
     async selectFunction(name: string | null) {
+        $('.fold').popover('dispose');
         this.blockContainer.innerHTML = '';
         this.svg.innerHTML = '';
         this.estimatedPNGSize.innerHTML = '';
@@ -407,16 +517,62 @@ export class Cfg extends Pane<CfgState> {
             fn.nodes.length
         }`;
         this.estimatedPNGSize.innerHTML = `(~${size_to_human(
-            this.layout.getWidth() * this.layout.getHeight() * 4 * EST_COMPRESSION_RATIO
+            this.layout.getWidth() * this.layout.getHeight() * 4 * EST_COMPRESSION_RATIO,
         )})`;
+        if (this.state.selectedFunction !== name || this.firstRender) {
+            this.resetView();
+            this.firstRender = false;
+        }
+        this.state.selectedFunction = name;
+        this.updateState();
     }
 
-    zoom(zoom: number) {
+    resetView(resetZoom?: boolean) {
+        // If we have selected a new function, or this is the first load, reset zoom and pan to the function entry
+        if (this.layout.blocks.length > 0) {
+            if (resetZoom) {
+                this.setZoom(1);
+            }
+            const entry_pos = this.layout.blocks[0].coordinates;
+            const container_size = this.graphContainer.getBoundingClientRect();
+            const entry_size = this.bbMap[this.layout.blocks[0].data.id].getBoundingClientRect();
+            this.setPan({
+                // entry_size will already have the zoom factored in
+                x: -(entry_pos.x * this.zoom) + container_size.width / 2 - entry_size.width / 2,
+                y: entry_pos.y * this.zoom,
+            });
+        }
+    }
+
+    birdsEyeView() {
+        if (this.layout.blocks.length > 0) {
+            const fullW = this.layout.getWidth();
+            const fullH = this.layout.getHeight();
+            const container_size = this.graphContainer.getBoundingClientRect();
+            const zoom = Math.min(container_size.width / fullW, container_size.height / fullH);
+            this.setZoom(zoom);
+            this.setPan({
+                x: container_size.width / 2 - (fullW * zoom) / 2,
+                y: container_size.height / 2 - (fullH * zoom) / 2,
+            });
+        }
+    }
+
+    setZoom(zoom: number, superficial?: boolean) {
         this.graphElement.style.transform = `scale(${zoom})${this.extraTransforms}`;
+        if (!superficial) {
+            this.zoom = zoom;
+        }
+    }
+
+    setPan(p: Coordinate) {
+        this.currentPosition = p;
+        this.graphElement.style.left = this.currentPosition.x + 'px';
+        this.graphElement.style.top = this.currentPosition.y + 'px';
     }
 
     createSVG() {
-        this.zoom(1);
+        this.setZoom(1, true);
         let doc = '';
         doc += '<?xml version="1.0"?>';
         doc += '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">';
@@ -429,15 +585,12 @@ export class Cfg extends Pane<CfgState> {
         })}>`;
         doc += '<style>.code{font: 16px Consolas;}</style>';
         // insert the background
-        const pane = this.graphContainer.parentElement;
-        assert(pane && pane.classList.contains('lm_content'), 'Unknown parent');
-        const pane_style = window.getComputedStyle(pane);
         doc += `<rect ${attrs({
             x: '0',
             y: '0',
             width: this.svg.style.width,
             height: this.svg.style.height,
-            fill: pane_style.backgroundColor,
+            fill: window.getComputedStyle(this.graphContainer).backgroundColor,
         })} />`;
         // just grab the edges/arrows directly
         doc += this.svg.innerHTML;
@@ -466,14 +619,14 @@ export class Cfg extends Pane<CfgState> {
                 const left = span_box.left - block_bounding_box.left;
                 doc += `<text ${attrs({
                     x: block.coordinates.x + left,
-                    y: block.coordinates.y + top + span_box.height / 2 + parseInt(block_style.paddingTop),
+                    y: block.coordinates.y + top + span_box.height / 2 + Number.parseInt(block_style.paddingTop),
                     class: 'code',
                     fill: span_style.color,
-                })}>${escapeSVG(text)}</text>`;
+                })}>${escapeHTML(text)}</text>`;
             }
         }
         doc += '</svg>';
-        this.zoom(this.state.zoom);
+        this.setZoom(this.zoom, true);
         return doc;
     }
 
@@ -516,11 +669,26 @@ export class Cfg extends Pane<CfgState> {
             const topBarHeight = utils.updateAndCalcTopBarHeight(this.domRoot, this.topBar, this.hideable);
             this.graphContainer.style.width = `${unwrap(this.domRoot.width())}px`;
             this.graphContainer.style.height = `${unwrap(this.domRoot.height()) - topBarHeight}px`;
+            $('.fold').popover('hide');
         });
+    }
+
+    override getCurrentState(): CfgState & PaneState {
+        const state = {
+            id: this.compilerInfo.compilerId,
+            compilerName: this.compilerInfo.compilerName,
+            editorid: this.compilerInfo.editorId,
+            treeid: this.compilerInfo.treeId,
+            selectedFunction: this.state.selectedFunction,
+            isircfg: this.state.isircfg,
+        };
+        this.paneRenaming.addState(state);
+        return state;
     }
 
     override close(): void {
         this.eventHub.unsubscribe();
-        this.eventHub.emit('cfgViewClosed', this.compilerInfo.compilerId);
+        this.eventHub.emit('cfgViewClosed', this.compilerInfo.compilerId, this.state.isircfg === true);
+        this.fictitiousGraphContainer.remove();
     }
 }

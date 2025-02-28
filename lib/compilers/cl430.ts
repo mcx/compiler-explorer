@@ -22,16 +22,18 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {CompilerInfo} from '../../types/compiler.interfaces';
-import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces';
-import {BaseCompiler} from '../base-compiler';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {CompilationEnvironment} from '../compilation-env.js';
+import {changeExtension} from '../utils.js';
 
 export class CL430Compiler extends BaseCompiler {
     static get key() {
         return 'cl430';
     }
 
-    constructor(compilerInfo: CompilerInfo & Record<string, any>, env) {
+    constructor(compilerInfo: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(compilerInfo, env);
 
         // We need to have the same name for the C/C++ file as we expect for the output file
@@ -52,7 +54,7 @@ export class CL430Compiler extends BaseCompiler {
             '--keep_asm',
             '--asm_extension=.s',
             '--output_file',
-            this.filename(outputFilename.replace('.s', '')),
+            this.filename(changeExtension(outputFilename, '')),
         ];
     }
 }

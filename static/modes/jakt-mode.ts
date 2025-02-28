@@ -21,11 +21,9 @@
 // CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
+import * as monaco from 'monaco-editor';
 
-'use strict';
-const monaco = require('monaco-editor');
-
-function definition() {
+function definition(): monaco.languages.IMonarchLanguage {
     return {
         defaultToken: 'invalid',
 
@@ -45,6 +43,7 @@ function definition() {
             'continue',
             'throw',
             'yield',
+            'fn',
             'function',
             'extern',
             'import',
@@ -207,5 +206,3 @@ function definition() {
 
 monaco.languages.register({id: 'jakt'});
 monaco.languages.setMonarchTokensProvider('jakt', definition());
-
-export {};

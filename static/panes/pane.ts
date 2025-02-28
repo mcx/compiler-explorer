@@ -22,19 +22,23 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import _ from 'underscore';
 import {Container} from 'golden-layout';
 import * as monaco from 'monaco-editor';
+import _ from 'underscore';
 
-import {MonacoPaneState, PaneCompilerState, PaneState} from './pane.interfaces';
+import {MonacoPaneState, PaneCompilerState, PaneState} from './pane.interfaces.js';
 
-import {FontScale} from '../widgets/fontscale';
-import {Settings, SiteSettings} from '../settings';
-import * as utils from '../utils';
+import {Settings, SiteSettings} from '../settings.js';
+import * as utils from '../utils.js';
+import {FontScale} from '../widgets/fontscale.js';
 
-import {PaneRenaming} from '../widgets/pane-renaming';
-import {EventHub} from '../event-hub';
-import {Hub} from '../hub';
+import {escapeHTML} from '../../shared/common-utils.js';
+import {unwrap} from '../assert.js';
+import {CompilationResult} from '../compilation/compilation.interfaces.js';
+import {CompilerInfo} from '../compiler.interfaces.js';
+import {EventHub} from '../event-hub.js';
+import {Hub} from '../hub.js';
+import {PaneRenaming} from '../widgets/pane-renaming.js';
 
 /**
  * Basic container for a tool pane in Compiler Explorer.
@@ -69,15 +73,10 @@ export abstract class Pane<S> {
 
         this.hideable = this.domRoot.find('.hideable');
 
-        this.compilerInfo = {
-            compilerId: state.id,
-            compilerName: state.compilerName,
-            editorId: state.editorid,
-            treeId: state.treeid,
-        };
+        this.initializeCompilerInfo(state);
         this.topBar = this.domRoot.find('.top-bar');
 
-        this.paneRenaming = new PaneRenaming(this, state);
+        this.paneRenaming = new PaneRenaming(this, state, hub);
 
         this.initializeDefaults();
         this.initializeGlobalDependentProperties();
@@ -88,7 +87,15 @@ export abstract class Pane<S> {
         this.registerButtons(state);
         this.registerStandardCallbacks();
         this.registerCallbacks();
-        this.registerOpeningAnalyticsEvent();
+    }
+
+    protected initializeCompilerInfo(state: PaneState) {
+        this.compilerInfo = {
+            compilerId: state.id,
+            compilerName: state.compilerName,
+            editorId: state.editorid,
+            treeId: state.treeid,
+        };
     }
 
     /**
@@ -102,20 +109,6 @@ export abstract class Pane<S> {
      * ```
      */
     abstract getInitialHTML(): string;
-
-    /**
-     * Emit analytics event for opening the pane tab. Typical implementation
-     * looks like this:
-     *
-     * ```ts
-     * ga.proxy('send', {
-     *   hitType: 'event',
-     *   eventCategory: 'OpenViewPane',
-     *   eventAction: 'RustMir',
-     * });
-     * ```
-     */
-    abstract registerOpeningAnalyticsEvent(): void;
 
     initializeDefaults(): void {}
 
@@ -154,7 +147,13 @@ export abstract class Pane<S> {
      * @param options - User commandline args
      * @param editorId - The editor id the updated compiler is attached to
      */
-    abstract onCompiler(compilerId: number, compiler: unknown, options: string, editorId: number, treeId: number): void;
+    abstract onCompiler(
+        compilerId: number,
+        compiler: CompilerInfo | null,
+        options: string,
+        editorId: number,
+        treeId: number,
+    ): void;
 
     /**
      * Handle compilation result.
@@ -174,19 +173,18 @@ export abstract class Pane<S> {
      * @param compiler - The compiler object
      * @param result - The entire HTTP request response
      */
-    abstract onCompileResult(compilerId: number, compiler: unknown, result: unknown): void;
+    abstract onCompileResult(compilerId: number, compiler: CompilerInfo, result: CompilationResult): void;
 
     /**
      * Perform any clean-up events when the pane is closed.
      *
-     * This is typically used to emit an analytics event for closing the pane,
-     * unsubscribing from the event hub and disposing the monaco editor.
+     * This is typically used to unsubscribe from the event hub and dispose the monaco editor.
      */
     abstract close(): void;
 
     /** Initialize standard lifecycle hooks */
     protected registerStandardCallbacks(): void {
-        this.paneRenaming.on('renamePane', this.updateState.bind(this));
+        this.eventHub.on('renamePane', this.updateState.bind(this));
         this.container.on('destroy', this.close.bind(this));
         this.container.on('resize', this.resize.bind(this));
         this.eventHub.on('compileResult', this.onCompileResult.bind(this));
@@ -212,9 +210,8 @@ export abstract class Pane<S> {
         const {compilerName, editorId, treeId, compilerId} = this.compilerInfo;
         if (editorId) {
             return `${compilerName} (Editor #${editorId}, Compiler #${compilerId})`;
-        } else {
-            return `${compilerName} (Tree #${treeId}, Compiler #${compilerId})`;
         }
+        return `${compilerName} (Tree #${treeId}, Compiler #${compilerId})`;
     }
 
     /** Get name for the pane */
@@ -224,7 +221,7 @@ export abstract class Pane<S> {
 
     /** Update the pane's title, called when the pane name or compiler info changes */
     protected updateTitle() {
-        this.container.setTitle(_.escape(this.getPaneName()));
+        this.container.setTitle(escapeHTML(this.getPaneName()));
     }
 
     /** Close the pane if the compiler this pane was attached to closes */
@@ -266,10 +263,11 @@ export abstract class Pane<S> {
  */
 export abstract class MonacoPane<E extends monaco.editor.IEditor, S> extends Pane<S> {
     editor: E;
+    editorDecorations: monaco.editor.IEditorDecorationsCollection;
     selection: monaco.Selection | undefined = undefined;
     fontScale: FontScale;
 
-    protected constructor(hub: any /* Hub */, container: Container, state: S & MonacoPaneState) {
+    protected constructor(hub: Hub, container: Container, state: S & MonacoPaneState) {
         super(hub, container, state);
         this.selection = state.selection;
 
@@ -278,7 +276,8 @@ export abstract class MonacoPane<E extends monaco.editor.IEditor, S> extends Pan
 
     override registerButtons(state: S): void {
         const editorRoot = this.domRoot.find('.monaco-placeholder')[0];
-        this.editor = this.createEditor(editorRoot);
+        this.createEditor(editorRoot);
+        this.editorDecorations = this.editor.createDecorationsCollection();
         this.fontScale = new FontScale(this.domRoot, state, this.editor);
     }
 
@@ -296,8 +295,8 @@ export abstract class MonacoPane<E extends monaco.editor.IEditor, S> extends Pan
         _.defer(() => {
             const topBarHeight = utils.updateAndCalcTopBarHeight(this.domRoot, this.topBar, this.hideable);
             this.editor.layout({
-                width: this.domRoot.width() as number,
-                height: (this.domRoot.height() as number) - topBarHeight,
+                width: unwrap(this.domRoot.width()),
+                height: unwrap(this.domRoot.height()) - topBarHeight,
             });
         });
     }
@@ -312,7 +311,7 @@ export abstract class MonacoPane<E extends monaco.editor.IEditor, S> extends Pan
      * }));
      * ```
      */
-    abstract createEditor(editorRoot: HTMLElement): E;
+    abstract createEditor(editorRoot: HTMLElement): void;
 
     protected override onSettingsChange(settings: SiteSettings) {
         super.onSettingsChange(settings);
@@ -336,12 +335,13 @@ export abstract class MonacoPane<E extends monaco.editor.IEditor, S> extends Pan
     /** Initialize standard lifecycle hooks */
     protected override registerStandardCallbacks(): void {
         super.registerStandardCallbacks();
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+
         if (this.fontScale) this.fontScale.on('change', this.updateState.bind(this));
         this.eventHub.on('broadcastFontScale', (scale: number) => {
             this.fontScale.setScale(scale);
             this.updateState();
         });
+        this.eventHub.on('printrequest', this.sendPrintData, this);
     }
 
     /**
@@ -349,4 +349,44 @@ export abstract class MonacoPane<E extends monaco.editor.IEditor, S> extends Pan
      * editor instance
      */
     registerEditorActions(): void {}
+
+    /**
+     * Utility function to check if this is a code editor or something else (like a diff editor)
+     */
+    protected isStandaloneEditor(editor: monaco.editor.IEditor): editor is monaco.editor.IStandaloneCodeEditor {
+        return editor.getEditorType() === 'vs.editor.ICodeEditor';
+    }
+    /**
+     * Get the name of the pane to be displayed in the print view
+     */
+    abstract getPrintName(): string;
+
+    /**
+     * Send any printable content to the print view when requested
+     */
+    protected sendPrintData() {
+        const editor = this.editor;
+        if (this.isStandaloneEditor(editor)) {
+            const model = (editor as monaco.editor.IStandaloneCodeEditor).getModel();
+            if (model) {
+                const lines = [...new Array(model.getLineCount()).keys()].map(i =>
+                    monaco.editor.colorizeModelLine(model, i + 1),
+                );
+                const extra = this.getExtraPrintData();
+                this.eventHub.emit(
+                    'printdata',
+                    `<h1>${this.getPrintName()}: ${escapeHTML(this.getPaneName())}</h1>` +
+                        (extra ?? '') +
+                        `<code>${lines.join('<br/>\n')}</code>`,
+                );
+            }
+        }
+    }
+
+    /**
+     * Provide additional info to be included below the header in the default sendPrintData
+     */
+    protected getExtraPrintData(): string | undefined {
+        return undefined;
+    }
 }

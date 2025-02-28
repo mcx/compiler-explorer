@@ -22,24 +22,27 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {assert} from 'chai';
-import {isValidAd} from '../motd';
-import {ITestable} from './frontend-testing.interfaces';
+/// <reference path="../../node_modules/cypress/types/cypress-global-vars.d.ts" />
 
-const stub = global.sinon.stub;
+import {isValidAd} from '../motd.js';
+import {ITestable} from './frontend-testing.interfaces.js';
+
+import {Ad} from '../motd.interfaces.js';
 
 class MotdTests implements ITestable {
     public readonly description: string = 'motd';
 
-    private static assertAd(ad, subLang, expected, message) {
-        assert.equal(isValidAd(ad, subLang), expected, message);
+    private static assertAd(ad: Ad, subLang: string, expected: boolean, message: string) {
+        if (isValidAd(ad, subLang) !== expected) {
+            throw new Error(message);
+        }
     }
 
-    private static assertAdWithDateNow(dateNow, ad, subLang, expected, message) {
-        const dateNowStub = stub(Date, 'now');
-        dateNowStub.returns(dateNow);
+    private static assertAdWithDateNow(dateNow: number, ad: Ad, subLang: string, expected: boolean, message: string) {
+        const originalDateNow = Date.now;
+        Date.now = () => dateNow;
         MotdTests.assertAd(ad, subLang, expected, message);
-        dateNowStub.restore();
+        Date.now = originalDateNow;
     }
 
     public async run() {
@@ -48,9 +51,9 @@ class MotdTests implements ITestable {
                 filter: [],
                 html: '',
             },
-            null,
+            'fakeLang',
             true,
-            'Keep ad if sublang is not set'
+            'Keep ad if sublang is not set',
         );
 
         MotdTests.assertAd(
@@ -58,9 +61,9 @@ class MotdTests implements ITestable {
                 filter: ['fakeLang'],
                 html: '',
             },
-            true,
+            'langForTest',
             false,
-            'Keep ad if sublang is not set even if filtering for lang'
+            'Keep ad if sublang is not set even if filtering for lang',
         );
 
         MotdTests.assertAd(
@@ -70,7 +73,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             true,
-            'Keep ad if no lang is set'
+            'Keep ad if no lang is set',
         );
 
         MotdTests.assertAd(
@@ -80,7 +83,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             false,
-            'Filters ad if not the correct language'
+            'Filters ad if not the correct language',
         );
 
         MotdTests.assertAd(
@@ -90,7 +93,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             true,
-            'Keep ad if the correct language is used'
+            'Keep ad if the correct language is used',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -102,7 +105,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             true,
-            'Keep ad if now > from'
+            'Keep ad if now > from',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -114,7 +117,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             false,
-            'Filter ad if now < from'
+            'Filter ad if now < from',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -126,7 +129,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             true,
-            'Keep ad if now < until'
+            'Keep ad if now < until',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -138,7 +141,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             false,
-            'Filter ad if now > until'
+            'Filter ad if now > until',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -151,7 +154,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             true,
-            'Keep ad if from < now < until'
+            'Keep ad if from < now < until',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -164,7 +167,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             false,
-            'Filter ad if now < from < until'
+            'Filter ad if now < from < until',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -177,7 +180,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             false,
-            'Filter ad if from < until < now'
+            'Filter ad if from < until < now',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -190,7 +193,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             false,
-            'Filter ad if until < now < from'
+            'Filter ad if until < now < from',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -203,7 +206,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             false,
-            'Filter ad if from < now < until but filtered by lang'
+            'Filter ad if from < now < until but filtered by lang',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -216,7 +219,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             true,
-            'Keep ad if from < now < until and not filtered by lang'
+            'Keep ad if from < now < until and not filtered by lang',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -229,7 +232,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             true,
-            'Keep ad if from = now < until and not filtered by lang'
+            'Keep ad if from = now < until and not filtered by lang',
         );
 
         MotdTests.assertAdWithDateNow(
@@ -242,7 +245,7 @@ class MotdTests implements ITestable {
             },
             'langForTest',
             true,
-            'Keep ad if from < now = until and not filtered by lang'
+            'Keep ad if from < now = until and not filtered by lang',
         );
     }
 }

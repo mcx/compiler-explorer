@@ -22,15 +22,27 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
-import {CompilationResult, ExecutionOptions} from '../../types/compilation/compilation.interfaces';
-import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces';
-import {BaseCompiler} from '../base-compiler';
-
-import {AsmResultSource, ParsedAsmResultLine} from '../../types/asmresult/asmresult.interfaces';
+import type {
+    CacheKey,
+    CompilationResult,
+    ExecutionOptionsWithEnv,
+} from '../../types/compilation/compilation.interfaces.js';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import type {ExecutableExecutionOptions} from '../../types/execution/execution.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {CompilationEnvironment} from '../compilation-env.js';
 
 export class HookCompiler extends BaseCompiler {
+    private readonly hook_home: string;
+
+    constructor(compilerInfo: PreliminaryCompilerInfo & Record<string, any>, env: CompilationEnvironment) {
+        super(compilerInfo, env);
+        this.hook_home = path.resolve(path.join(path.dirname(this.compiler.exe), '..'));
+    }
+
     static get key(): string {
         return 'hook';
     }
@@ -43,11 +55,23 @@ export class HookCompiler extends BaseCompiler {
         return path.join(dirPath, 'example.out');
     }
 
+    addHookHome(env: any) {
+        return {HOOK_HOME: this.hook_home, ...env};
+    }
+
+    override async handleInterpreting(
+        key: CacheKey,
+        executeParameters: ExecutableExecutionOptions,
+    ): Promise<CompilationResult> {
+        executeParameters.env = this.addHookHome(executeParameters.env);
+        return super.handleInterpreting(key, executeParameters);
+    }
+
     override async runCompiler(
         compiler: string,
         options: string[],
         inputFilename: string,
-        execOptions: ExecutionOptions,
+        execOptions: ExecutionOptionsWithEnv,
     ): Promise<CompilationResult> {
         const dirPath = path.dirname(inputFilename);
         const outputFilename = this.getOutputFilename(dirPath);
@@ -55,32 +79,36 @@ export class HookCompiler extends BaseCompiler {
         return super.runCompiler(compiler, options, inputFilename, execOptions);
     }
 
-    override processAsm(result) {
+    override async processAsm(result, filters: ParseFiltersAndOutputOptions, options: string[]) {
+        // Ignoring `trim` filter because it is not supported by Hook.
+        filters.trim = false;
+        const _result = await super.processAsm(result, filters, options);
         const commentRegex = /^\s*;(.*)/;
         const instructionRegex = /^\s{2}(\d+)(.*)/;
-        const lines = result.asm.split('\n');
-        const asm: ParsedAsmResultLine[] = [];
-        let lastLineNo: number | undefined;
-        for (const line of lines) {
-            if (commentRegex.test(line)) {
-                asm.push({text: line, source: {line: undefined, file: null}});
-                lastLineNo = undefined;
+        const asm = _result.asm;
+        let lastLineNo: number | null = null;
+        for (const item of asm) {
+            const text = item.text;
+            if (commentRegex.test(text)) {
+                item.source = {line: null, file: null};
+                lastLineNo = null;
                 continue;
             }
-            const match = line.match(instructionRegex);
+            const match = text.match(instructionRegex);
             if (match) {
-                const lineNo = parseInt(match[1]);
-                asm.push({text: line, source: {line: lineNo, file: null}});
+                const lineNo = Number.parseInt(match[1]);
+                item.source = {line: lineNo, file: null};
                 lastLineNo = lineNo;
                 continue;
             }
-            if (line) {
-                asm.push({text: line, source: {line: lastLineNo, file: null}});
+            if (text) {
+                item.source = {line: lastLineNo, file: null};
                 continue;
             }
-            asm.push({text: line, source: {line: undefined, file: null}});
-            lastLineNo = undefined;
+            item.source = {line: null, file: null};
+            lastLineNo = null;
         }
-        return {asm: asm};
+        _result.asm = asm;
+        return _result;
     }
 }

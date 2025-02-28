@@ -22,15 +22,20 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
-import {readdir, readFile, rename, writeFile} from 'fs-extra';
+import fs from 'node:fs/promises';
 
-import {CompilationResult, ExecutionOptions} from '../../types/compilation/compilation.interfaces';
-import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces';
-import {BaseCompiler} from '../base-compiler';
-import * as exec from '../exec';
-import {logger} from '../logger';
+import type {
+    CompilationResult,
+    ExecutionOptions,
+    ExecutionOptionsWithEnv,
+} from '../../types/compilation/compilation.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {BaseCompiler} from '../base-compiler.js';
+import * as exec from '../exec.js';
+import {logger} from '../logger.js';
+import * as utils from '../utils.js';
 
 interface ASICSelection {
     asic?: string;
@@ -97,15 +102,11 @@ Please supply an ASIC from the following options:`,
         };
     }
 
-    execTime(startTime: bigint, endTime: bigint): string {
-        return ((endTime - startTime) / BigInt(1000000)).toString();
-    }
-
     override async runCompiler(
         compiler: string,
         options: string[],
         inputFilename: string,
-        execOptions: ExecutionOptions,
+        execOptions: ExecutionOptionsWithEnv,
     ): Promise<CompilationResult> {
         if (!execOptions) {
             execOptions = this.getDefaultExecOptions();
@@ -147,9 +148,9 @@ Please supply an ASIC from the following options:`,
             return {
                 code: -1,
                 okToCache: true,
-                filenameTransform: x => x,
+                filenameTransform: (x: string) => x,
                 stdout: asicSelection.error,
-                execTime: this.execTime(startTime, endTime),
+                execTime: utils.deltaTimeNanoToMili(startTime, endTime),
             };
         }
 
@@ -157,20 +158,20 @@ Please supply an ASIC from the following options:`,
         if (dxcResult.code !== 0) {
             // Failed to compile SPIR-V intermediate product. Exit immediately with DXC invocation result.
             const endTime = process.hrtime.bigint();
-            dxcResult.execTime = this.execTime(startTime, endTime);
+            dxcResult.execTime = utils.deltaTimeNanoToMili(startTime, endTime);
             return dxcResult;
         }
 
         try {
-            await writeFile(path.join(outputDir, spvTemp), dxcResult.stdout);
+            await fs.writeFile(path.join(outputDir, spvTemp), dxcResult.stdout);
         } catch (e) {
             const endTime = process.hrtime.bigint();
             return {
                 code: -1,
                 okToCache: true,
-                filenameTransform: x => x,
+                filenameTransform: (x: string) => x,
                 stdout: 'Failed to emit intermediate SPIR-V result.',
-                execTime: this.execTime(startTime, endTime),
+                execTime: utils.deltaTimeNanoToMili(startTime, endTime),
             };
         }
 
@@ -192,7 +193,7 @@ Please supply an ASIC from the following options:`,
         if (rgaResult.code !== 0) {
             // Failed to compile AMD ISA
             const endTime = process.hrtime.bigint();
-            rgaResult.execTime = this.execTime(startTime, endTime);
+            rgaResult.execTime = utils.deltaTimeNanoToMili(startTime, endTime);
             return rgaResult;
         }
 
@@ -200,18 +201,18 @@ Please supply an ASIC from the following options:`,
         // architecture and appends the shader type (with underscore separators). Here,
         // we rename the generated file to the output file Compiler Explorer expects.
 
-        const files = await readdir(outputDir, {encoding: 'utf8'});
+        const files = await fs.readdir(outputDir, {encoding: 'utf8'});
         for (const file of files) {
             if (file.startsWith((asicSelection.asic as string) + '_output')) {
-                await rename(path.join(outputDir, file), outputFile);
+                await fs.rename(path.join(outputDir, file), outputFile);
 
                 registerAnalysisFile = path.join(outputDir, file.replace('output', 'livereg').replace('.s', '.txt'));
                 // The register analysis file contains a legend, and register liveness data
                 // for each line of disassembly. Interleave those lines into the final output
                 // as assembly comments.
-                const asm = await readFile(outputFile, 'utf8');
+                const asm = await fs.readFile(outputFile, 'utf8');
                 const asmLines = asm.split(/\r?\n/);
-                const analysis = await readFile(registerAnalysisFile, 'utf8');
+                const analysis = await fs.readFile(registerAnalysisFile, 'utf8');
                 const analysisLines = analysis.split(/\r?\n/);
 
                 // The first few lines of the register analysis are the legend. Emit those lines
@@ -246,7 +247,7 @@ Please supply an ASIC from the following options:`,
                     outputAsm.push(`; ${analysisLines[i + analysisOffset]}`, asmLines[i + asmOffset]);
                 }
 
-                await writeFile(outputFile, outputAsm.join('\n'));
+                await fs.writeFile(outputFile, outputAsm.join('\n'));
 
                 if (asicSelection.printASICs) {
                     rgaResult.stdout += `ISA compiled with the default AMD ASIC (Radeon RX 6800 series RDNA2).
@@ -259,14 +260,14 @@ where [ASIC] corresponds to one of the following options:`;
                 }
 
                 const endTime = process.hrtime.bigint();
-                rgaResult.execTime = this.execTime(startTime, endTime);
+                rgaResult.execTime = utils.deltaTimeNanoToMili(startTime, endTime);
                 return rgaResult;
             }
         }
 
         // Arriving here means the expected ISA result wasn't emitted. Synthesize an error.
         const endTime = process.hrtime.bigint();
-        rgaResult.execTime = this.execTime(startTime, endTime);
+        rgaResult.execTime = utils.deltaTimeNanoToMili(startTime, endTime);
         rgaResult.stdout += `\nRGA didn't emit expected ISA output.`;
         return rgaResult;
     }

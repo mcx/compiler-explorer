@@ -22,7 +22,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {MapFileReader} from './map-file';
+import {MapFileReader} from './map-file.js';
 
 export class MapFileReaderVS extends MapFileReader {
     regexVsNames = /^\s([\da-f]*):([\da-f]*)\s*([\w$.?@]*)\s*([\da-f]*)(\sf\si\s*|\sf\s*|\s*)([\w.:<>-]*)$/i;
@@ -32,7 +32,7 @@ export class MapFileReaderVS extends MapFileReader {
     override tryReadingPreferredAddress(line: string) {
         const matches = line.match(this.regexVSLoadAddress);
         if (matches) {
-            this.preferredLoadAddress = parseInt(matches[1], 16);
+            this.preferredLoadAddress = Number.parseInt(matches[1], 16);
         }
     }
 
@@ -50,7 +50,7 @@ export class MapFileReaderVS extends MapFileReader {
             this.segments.push({
                 ...this.addressToObject(matches[1], matches[2]),
                 id: this.segments.length + 1,
-                segmentLength: parseInt(matches[3], 16),
+                segmentLength: Number.parseInt(matches[3], 16),
                 unitName: false,
             });
         }
@@ -62,10 +62,10 @@ export class MapFileReaderVS extends MapFileReader {
     override tryReadingNamedAddress(line: string) {
         const matches = line.match(this.regexVsNames);
         if (matches && matches.length >= 7 && matches[4] !== '') {
-            const addressWithOffset = parseInt(matches[4], 16);
+            const addressWithOffset = Number.parseInt(matches[4], 16);
             const symbolObject = {
                 segment: matches[1],
-                addressWithoutOffset: parseInt(matches[2], 16),
+                addressWithoutOffset: Number.parseInt(matches[2], 16),
                 addressInt: addressWithOffset,
                 address: addressWithOffset.toString(16),
                 displayName: matches[3],

@@ -22,11 +22,9 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-'use strict';
+import * as monaco from 'monaco-editor';
 
-const monaco = require('monaco-editor');
-
-function definition() {
+function definition(): monaco.languages.IMonarchLanguage {
     return {
         tokenizer: {
             root: [
@@ -65,4 +63,4 @@ const def = definition();
 monaco.languages.register({id: 'asm6502'});
 monaco.languages.setMonarchTokensProvider('asm6502', def);
 
-export = def;
+export default def;

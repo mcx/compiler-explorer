@@ -22,17 +22,19 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import {Container} from 'golden-layout';
 import $ from 'jquery';
-import {Toggles} from '../widgets/toggles';
 import * as monaco from 'monaco-editor';
 import _ from 'underscore';
-import {MonacoPane} from './pane';
-import {ga} from '../analytics';
-import * as monacoConfig from '../monaco-config';
-import {PPViewState} from './pp-view.interfaces';
-import {Container} from 'golden-layout';
-import {MonacoPaneState} from './pane.interfaces';
-import {Hub} from '../hub';
+import {unwrap} from '../assert.js';
+import {CompilationResult, PPOutput} from '../compilation/compilation.interfaces.js';
+import {CompilerInfo} from '../compiler.interfaces.js';
+import {Hub} from '../hub.js';
+import * as monacoConfig from '../monaco-config.js';
+import {Toggles} from '../widgets/toggles.js';
+import {MonacoPaneState} from './pane.interfaces.js';
+import {MonacoPane} from './pane.js';
+import {PPViewState} from './pp-view.interfaces.js';
 
 export class PP extends MonacoPane<monaco.editor.IStandaloneCodeEditor, PPViewState> {
     options: any;
@@ -53,24 +55,24 @@ export class PP extends MonacoPane<monaco.editor.IStandaloneCodeEditor, PPViewSt
         return $('#pp').html();
     }
 
-    override createEditor(editorRoot: HTMLElement): monaco.editor.IStandaloneCodeEditor {
-        return monaco.editor.create(
+    override createEditor(editorRoot: HTMLElement): void {
+        this.editor = monaco.editor.create(
             editorRoot,
             monacoConfig.extendConfig({
                 language: 'plaintext',
                 readOnly: true,
                 glyphMargin: true,
                 lineNumbersMinChars: 3,
-            })
+            }),
         );
     }
 
-    override registerOpeningAnalyticsEvent(): void {
-        ga.proxy('send', {
-            hitType: 'event',
-            eventCategory: 'OpenViewPane',
-            eventAction: 'PP',
-        });
+    override getPrintName() {
+        return 'Preprocessor Output';
+    }
+
+    override getDefaultPaneName() {
+        return 'Preprocessor Output';
     }
 
     override registerButtons(state: PPViewState & MonacoPaneState): void {
@@ -91,7 +93,7 @@ export class PP extends MonacoPane<monaco.editor.IStandaloneCodeEditor, PPViewSt
                 'filter-headers': options['filter-headers'],
                 'clang-format': options['clang-format'],
             },
-            true
+            true,
         );
     }
 
@@ -100,17 +102,17 @@ export class PP extends MonacoPane<monaco.editor.IStandaloneCodeEditor, PPViewSt
     }
 
     override resize() {
-        const topBarHeight = this.topBar.outerHeight(true) as number;
+        const topBarHeight = unwrap(this.topBar.outerHeight(true));
         this.editor.layout({
-            width: this.domRoot.width() as number,
-            height: (this.domRoot.height() as number) - topBarHeight,
+            width: unwrap(this.domRoot.width()),
+            height: unwrap(this.domRoot.height()) - topBarHeight,
         });
     }
 
-    override onCompileResult(compilerId: number, compiler: any, result: any) {
+    override onCompileResult(compilerId: number, compiler: CompilerInfo, result: CompilationResult) {
         if (this.compilerInfo.compilerId !== compilerId) return;
 
-        if (result.hasPpOutput) {
+        if (result.ppOutput) {
             this.showPpResults(result.ppOutput);
         } else if (compiler.supportsPpView) {
             this.showPpResults('<No output>');
@@ -127,15 +129,11 @@ export class PP extends MonacoPane<monaco.editor.IStandaloneCodeEditor, PPViewSt
         return this.editor.getModel()?.getLanguageId();
     }
 
-    override getDefaultPaneName() {
-        return 'Preprocessor Output';
-    }
-
-    showPpResults(results) {
+    showPpResults(results: PPOutput | string) {
         if (typeof results === 'object') {
             if (results.numberOfLinesFiltered > 0) {
                 this.editor.setValue(
-                    `/* <${results.numberOfLinesFiltered} lines filtered> */\n\n` + results.output.trimStart()
+                    `/* <${results.numberOfLinesFiltered} lines filtered> */\n\n` + results.output.trimStart(),
                 );
             } else {
                 this.editor.setValue(results.output.trimStart());
@@ -153,11 +151,11 @@ export class PP extends MonacoPane<monaco.editor.IStandaloneCodeEditor, PPViewSt
         }
     }
 
-    override onCompiler(id, compiler, options, editorid, treeid) {
+    override onCompiler(id: number, compiler: CompilerInfo | null, options: string, editorId: number, treeId: number) {
         if (id === this.compilerInfo.compilerId) {
             this.compilerInfo.compilerName = compiler ? compiler.name : '';
-            this.compilerInfo.editorId = editorid;
-            this.compilerInfo.treeId = treeid;
+            this.compilerInfo.editorId = editorId;
+            this.compilerInfo.treeId = treeId;
             this.updateTitle();
             if (compiler && !compiler.supportsPpView) {
                 this.editor.setValue('<Preprocessor output is not supported for this compiler>');
@@ -182,12 +180,12 @@ export class PP extends MonacoPane<monaco.editor.IStandaloneCodeEditor, PPViewSt
         return state;
     }
 
-    override onCompilerClose(id) {
+    override onCompilerClose(id: number) {
         if (id === this.compilerInfo.compilerId) {
             // We can't immediately close as an outer loop somewhere in GoldenLayout is iterating over
             // the hierarchy. We can't modify while it's being iterated over.
             this.close();
-            _.defer(function (self) {
+            _.defer((self: PP) => {
                 self.container.close();
             }, this);
         }

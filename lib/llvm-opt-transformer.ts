@@ -17,37 +17,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import {Transform, TransformCallback} from 'stream';
+import {parseAllDocuments} from 'yaml';
 
-import * as R from 'ramda';
-import * as YAML from 'yamljs';
+import {OptRemark} from '../static/panes/opt-view.interfaces.js';
 
-import {logger} from './logger';
+import {logger} from './logger.js';
 
-type Path = string;
-type OptType = 'Missed' | 'Passed' | 'Analysis';
-
-interface OptInfo {
-    optType: OptType;
-    displayString: string;
-}
-
-interface LLVMOptInfo extends OptInfo {
-    Pass: string;
-    Name: string;
-    DebugLoc: DebugLoc;
-    Function: string;
-    Args: Array<object>;
-}
-
-interface DebugLoc {
-    File: Path;
-    Line: number;
-    Column: number;
-}
-
-function DisplayOptInfo(optInfo: LLVMOptInfo) {
-    return optInfo.Args.reduce((acc, x) => {
+function DisplayOptInfo(optInfo: OptRemark) {
+    let displayString = optInfo.Args.reduce((acc, x) => {
         let inc = '';
         for (const [key, value] of Object.entries(x)) {
             if (key === 'DebugLoc') {
@@ -60,59 +37,31 @@ function DisplayOptInfo(optInfo: LLVMOptInfo) {
         }
         return acc + inc;
     }, '');
+    displayString = displayString.replaceAll('\n', ' ').replaceAll('\r', ' ');
+    return displayString;
 }
 
-const optTypeMatcher = /---\s(.*)\r?\n/;
-const docStart = '---';
-const docEnd = '\n...';
-const IsDocumentStart = (x: string) => x.substring(0, 3) === docStart;
-const FindDocumentEnd = (x: string) => {
-    const index = x.indexOf(docEnd);
-    return {found: index > -1, endpos: index + docEnd.length};
-};
+export function processRawOptRemarks(buffer: string, compileFileName = ''): OptRemark[] {
+    const output: OptRemark[] = [];
+    const remarksSet: Set<string> = new Set<string>();
+    const remarks: any = parseAllDocuments(buffer);
+    for (const doc of remarks) {
+        if (doc.errors !== undefined && doc.errors.length > 0) {
+            logger.warn('YAMLParseError: ' + JSON.stringify(doc.errors[0]));
+            continue;
+        }
 
-export class LLVMOptTransformer extends Transform {
-    _buffer: string;
-    _prevOpts: Set<string>; // Avoid duplicate display of remarks
-    constructor(options?: object) {
-        super(R.merge(options || {}, {objectMode: true}));
-        this._buffer = '';
-        this._prevOpts = new Set<string>();
-    }
-    override _flush(done: TransformCallback) {
-        this.processBuffer();
-        done();
-    }
-    override _transform(chunk: any, encoding: string, done: TransformCallback) {
-        this._buffer += chunk.toString();
-        //buffer until we have a start and and end
-        //if at any time i care about improving performance stash the offset
-        this.processBuffer();
-        done();
-    }
-    processBuffer() {
-        while (IsDocumentStart(this._buffer)) {
-            const {found, endpos} = FindDocumentEnd(this._buffer);
-            if (found) {
-                const [head, tail] = R.splitAt(endpos, this._buffer);
-                const optTypeMatch = head.match(optTypeMatcher);
-                const opt = YAML.parse(head);
-                const strOpt = JSON.stringify(opt);
-                if (!this._prevOpts.has(strOpt)) {
-                    this._prevOpts.add(strOpt);
+        const opt = doc.toJS();
+        if (!opt.DebugLoc || !opt.DebugLoc.File || !opt.DebugLoc.File.includes(compileFileName)) continue;
 
-                    if (optTypeMatch) {
-                        opt.optType = optTypeMatch[1].replace('!', '');
-                    } else {
-                        logger.warn('missing optimization type');
-                    }
-                    opt.displayString = DisplayOptInfo(opt);
-                    this.push(opt as LLVMOptInfo);
-                }
-                this._buffer = tail.replace(/^\n/, '');
-            } else {
-                break;
-            }
+        const strOpt = JSON.stringify(opt);
+        if (!remarksSet.has(strOpt)) {
+            remarksSet.add(strOpt);
+            opt.optType = doc.contents.tag.substring(1); // remove leading '!'
+            opt.displayString = DisplayOptInfo(opt);
+            output.push(opt as OptRemark);
         }
     }
+
+    return output;
 }

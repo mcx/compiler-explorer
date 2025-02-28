@@ -22,12 +22,13 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
-
-import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces';
-import {BaseCompiler} from '../base-compiler';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {ResultLine} from '../../types/resultline/resultline.interfaces.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {SPIRVAsmParser} from '../parsers/asm-parser-spirv.js';
 
 export class HLSLCompiler extends BaseCompiler {
+    protected spirvAsm: SPIRVAsmParser;
     static get key() {
         return 'hlsl';
     }
@@ -36,9 +37,34 @@ export class HLSLCompiler extends BaseCompiler {
         super(info, env);
 
         this.compiler.supportsIntel = false;
+        this.spirvAsm = new SPIRVAsmParser(this.compilerProps);
+
+        this.compiler.optPipeline = {
+            arg: ['-print-before-all', '-print-after-all'],
+            moduleScopeArg: [],
+            noDiscardValueNamesArg: [],
+        };
     }
 
-    /* eslint-disable no-unused-vars */
+    override async generateAST(inputFilename: string, options: string[]): Promise<ResultLine[]> {
+        // These options make DXC produce an AST dump
+        const newOptions = options
+            .filter(option => option !== '-Zi' && option !== '-Qembed_debug')
+            .concat(['-ast-dump']);
+
+        const execOptions = this.getDefaultExecOptions();
+        // A higher max output is needed for when the user includes headers
+        execOptions.maxOutput = 1024 * 1024 * 1024;
+
+        return this.llvmAst.processAst(
+            await this.runCompiler(this.compiler.exe, newOptions, this.filename(inputFilename), execOptions),
+        );
+    }
+
+    override couldSupportASTDump(version: string) {
+        return version.includes('libdxcompiler');
+    }
+
     override optionsForFilter(
         filters: ParseFiltersAndOutputOptions,
         outputFilename: string,
@@ -68,7 +94,15 @@ export class HLSLCompiler extends BaseCompiler {
         return options;
     }
 
-    override getIrOutputFilename(inputFilename: string) {
-        return this.getOutputFilename(path.dirname(inputFilename), this.outputFilebase).replace('.s', '.dxil');
+    override async processAsm(result, filters: ParseFiltersAndOutputOptions, options: string[]) {
+        if (this.isSpirv(result.asm)) {
+            return this.spirvAsm.processAsm(result.asm, filters);
+        }
+
+        return super.processAsm(result, filters, options);
+    }
+
+    isSpirv(code: string) {
+        return code.startsWith('; SPIR-V');
     }
 }

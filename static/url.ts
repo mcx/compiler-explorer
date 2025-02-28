@@ -22,12 +22,13 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import _ from 'underscore';
 import GoldenLayout from 'golden-layout';
+import _ from 'underscore';
 
 const lzstring = require('lz-string');
-const rison = require('rison');
 const Components = require('./components');
+
+import * as rison from './rison.js';
 
 export function convertOldState(state: any): any {
     const sc = state.compilers[0];
@@ -74,7 +75,7 @@ export function loadState(state: any): any {
     return state;
 }
 
-export function risonify(obj: object): string {
+export function risonify(obj: rison.JSONValue): string {
     return rison.quote(rison.encode_object(obj));
 }
 
@@ -87,21 +88,28 @@ export function deserialiseState(stateText: string): any {
     let exception;
     try {
         state = unrisonify(stateText);
-        if (state && state.z) {
-            state = unrisonify(lzstring.decompressFromBase64(state.z));
+        if (state?.z) {
+            const data = lzstring.decompressFromBase64(state.z);
+            // If lzstring fails to decompress this it'll return an empty string rather than throwing an error
+            if (data === '') {
+                throw new Error('lzstring decompress error, url is corrupted');
+            }
+            state = unrisonify(data);
         }
     } catch (ex) {
         exception = ex;
     }
 
+    // This handles prehistoric urls, assumes rison fails with an error
     if (!state) {
         try {
             state = JSON.parse(decodeURIComponent(stateText));
+            exception = null;
         } catch (ex) {
             if (!exception) exception = ex;
         }
     }
-    if (!state && exception) throw exception;
+    if (exception) throw exception;
     return loadState(state);
 }
 
@@ -113,7 +121,6 @@ export function serialiseState(stateText: any): string {
     const MinimalSavings = 0.2; // at least this ratio smaller
     if (compressed.length < uncompressed.length * (1.0 - MinimalSavings)) {
         return compressed;
-    } else {
-        return uncompressed;
     }
+    return uncompressed;
 }

@@ -22,36 +22,48 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
-import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces';
-import {BaseCompiler} from '../base-compiler';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {CompilationEnvironment} from '../compilation-env.js';
 
-import {BaseParser} from './argument-parsers';
+import {BaseParser} from './argument-parsers.js';
+
+function isMlirTranslate(compilerInfo: PreliminaryCompilerInfo): boolean {
+    return compilerInfo.group === 'mlirtranslate';
+}
 
 export class MLIRCompiler extends BaseCompiler {
     static get key() {
         return 'mlir';
     }
 
-    constructor(compilerInfo, env) {
-        if (!compilerInfo.disabledFilters) {
-            compilerInfo.disabledFilters = [
-                'binary',
-                'execute',
-                'demangle',
-                'intel',
-                'labels',
-                'libraryCode',
-                'directives',
-                'commentOnly',
-                'trim',
-            ];
-        }
-        super(compilerInfo, env);
+    constructor(compilerInfo: PreliminaryCompilerInfo, env: CompilationEnvironment) {
+        super(
+            {
+                disabledFilters: isMlirTranslate(compilerInfo)
+                    ? []
+                    : [
+                          'binary',
+                          'execute',
+                          'demangle',
+                          'intel',
+                          'labels',
+                          'libraryCode',
+                          'directives',
+                          'commentOnly',
+                          'trim',
+                          'debugCalls',
+                      ],
+                ...compilerInfo,
+            },
+            env,
+        );
     }
 
-    override getCompilerResultLanguageId() {
+    override getCompilerResultLanguageId(filters?: ParseFiltersAndOutputOptions): string | undefined {
         return 'mlir';
     }
 
@@ -59,15 +71,43 @@ export class MLIRCompiler extends BaseCompiler {
         return path.join(dirPath, 'example.out.mlir');
     }
 
-    override optionsForBackend(backendOptions, outputFilename): string[] {
+    override optionsForBackend(backendOptions: Record<string, any>, outputFilename: string): string[] {
         return ['-o', outputFilename];
     }
 
-    override getArgumentParser(): any {
+    override getArgumentParserClass(): any {
         return BaseParser;
     }
 
-    override optionsForFilter(filters: ParseFiltersAndOutputOptions, outputFilename, userOptions?): any[] {
+    override optionsForFilter(
+        filters: ParseFiltersAndOutputOptions,
+        outputFilename: string,
+        userOptions?: string[],
+    ): any[] {
         return [];
+    }
+
+    override async processAsm(result, filters: ParseFiltersAndOutputOptions, options: string[]) {
+        // at some point maybe a custom parser can be written, for now just don't filter anything
+        return super.processAsm(
+            result,
+            isMlirTranslate(this.compiler)
+                ? filters
+                : {
+                      labels: false,
+                      binary: false,
+                      commentOnly: false,
+                      demangle: false,
+                      optOutput: false,
+                      directives: false,
+                      dontMaskFilenames: false,
+                      execute: false,
+                      intel: false,
+                      libraryCode: false,
+                      trim: false,
+                      debugCalls: false,
+                  },
+            options,
+        );
     }
 }

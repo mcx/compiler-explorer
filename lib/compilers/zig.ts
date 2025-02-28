@@ -22,15 +22,18 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
 import Semver from 'semver';
 import _ from 'underscore';
 
-import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces';
-import {SelectedLibraryVersion} from '../../types/libraries/libraries.interfaces';
-import {BaseCompiler} from '../base-compiler';
-import {asSafeVer} from '../utils';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import type {SelectedLibraryVersion} from '../../types/libraries/libraries.interfaces.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {CompilationEnvironment} from '../compilation-env.js';
+import {asSafeVer} from '../utils.js';
+import {ZigParser} from './argument-parsers.js';
 
 export class ZigCompiler extends BaseCompiler {
     private readonly self_hosted_cli: boolean;
@@ -39,7 +42,7 @@ export class ZigCompiler extends BaseCompiler {
         return 'zig';
     }
 
-    constructor(info, env) {
+    constructor(info: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(info, env);
         this.compiler.supportsIntel = true;
         this.compiler.supportsIrView = true;
@@ -53,6 +56,7 @@ export class ZigCompiler extends BaseCompiler {
         } else {
             this.compiler.irArg = ['--emit', 'llvm-ir'];
         }
+        this.compiler.minIrArgs = ['--emit llvm-ir', '-femit-llvm-ir'];
     }
 
     override getSharedLibraryPathsAsArguments(): string[] {
@@ -118,7 +122,8 @@ export class ZigCompiler extends BaseCompiler {
         if (this.self_hosted_cli) {
             // Versions after 0.6.0 use a different command line interface.
             const outputDir = path.dirname(outputFilename);
-            options.push('--cache-dir', outputDir, '--name', name);
+            // -fno-strip: Do not strip debug info
+            options.push('--cache-dir', outputDir, '--name', name, '-fno-strip');
 
             if (filters.binary) {
                 options.push('-femit-bin=' + desiredName);
@@ -173,10 +178,14 @@ export class ZigCompiler extends BaseCompiler {
 
     override filterUserOptions(userOptions: string[]): string[] {
         const forbiddenOptions = /^(((--(cache-dir|name|output|verbose))|(-(mllvm|f(no-)?emit-))).*)$/;
-        return _.filter(userOptions, option => !forbiddenOptions.test(option));
+        return userOptions.filter(option => !forbiddenOptions.test(option));
     }
 
-    override isCfgCompiler(/*compilerVersion*/): boolean {
+    protected override getArgumentParserClass() {
+        return ZigParser;
+    }
+
+    override isCfgCompiler(): boolean {
         return true;
     }
 }

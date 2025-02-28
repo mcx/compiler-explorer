@@ -22,7 +22,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import stacktrace from '../lib/stacktrace';
+import {isString} from '../shared/common-utils.js';
+import {parse} from '../shared/stacktrace.js';
 
 // This file defines three assert utilities:
 // assert(condition, message?, extra_info...?): asserts condition
@@ -30,8 +31,8 @@ import stacktrace from '../lib/stacktrace';
 // assert_type(x, class, message?, extra_info...?)
 
 function get_diagnostic() {
-    const e = new Error(); // eslint-disable-line unicorn/error-message
-    const trace = stacktrace.parse(e);
+    const e = new Error();
+    const trace = parse(e);
     if (trace.length >= 4) {
         const invoker_frame = trace[3];
         if (invoker_frame.fileName && invoker_frame.lineNumber) {
@@ -61,12 +62,11 @@ function fail(fail_message: string, user_message: string | undefined, args: any[
     const diagnostic = get_diagnostic();
     if (diagnostic) {
         throw new Error(assert_line + `, at ${diagnostic.file}:${diagnostic.line}`);
-    } else {
-        throw new Error(assert_line);
     }
+    throw new Error(assert_line);
 }
 
-export function assert<C>(c: C, message?: string, ...extra_info: any[]): asserts c {
+export function assert(c: unknown, message?: string, ...extra_info: any[]): asserts c {
     if (!c) {
         fail('Assertion failed', message, extra_info);
     }
@@ -77,4 +77,14 @@ export function unwrap<T>(x: T | undefined | null, message?: string, ...extra_in
         fail('Unwrap failed', message, extra_info);
     }
     return x;
+}
+
+// This mainly a utility for JQuery.val(): string | number | string[] | undefined, in our code we typically want a
+// single string.
+// T is syntax sugar for unwrapping to a string union
+export function unwrapString<T extends string>(x: any, message?: string, ...extra_info: any[]): T {
+    if (!isString(x)) {
+        fail('String unwrap failed', message, extra_info);
+    }
+    return x as T;
 }

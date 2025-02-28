@@ -22,31 +22,42 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
-import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces';
+import {LLVMIrBackendOptions} from '../../types/compilation/ir.interfaces.js';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {unwrap} from '../assert.js';
+import {CompilationEnvironment} from '../compilation-env.js';
 
-import {Win32Compiler} from './win32';
+import {Win32Compiler} from './win32.js';
 
 export class ClangCLCompiler extends Win32Compiler {
     static override get key() {
         return 'clang-cl';
     }
 
-    constructor(info, env) {
+    constructor(info: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(info, env);
 
         this.compiler.supportsIrView = true;
         this.compiler.irArg = ['-Xclang', '-emit-llvm'];
+        this.compiler.minIrArgs = ['-emit-llvm'];
         this.compiler.supportsIntel = false;
         this.compiler.includeFlag = '/clang:-isystem';
     }
 
-    override async generateIR(inputFilename: string, options: string[], filters: ParseFiltersAndOutputOptions) {
+    override async generateIR(
+        inputFilename: string,
+        options: string[],
+        irOptions: LLVMIrBackendOptions,
+        produceCfg: boolean,
+        filters: ParseFiltersAndOutputOptions,
+    ) {
         // These options make Clang produce an IR
         const newOptions = options
             .filter(option => option !== '/FA' && !option.startsWith('/Fa'))
-            .concat(this.compiler.irArg);
+            .concat(unwrap(this.compiler.irArg));
 
         const execOptions = this.getDefaultExecOptions();
         // A higher max output is needed for when the user includes headers
@@ -54,17 +65,21 @@ export class ClangCLCompiler extends Win32Compiler {
 
         const output = await this.runCompiler(this.compiler.exe, newOptions, this.filename(inputFilename), execOptions);
         if (output.code !== 0) {
-            return [{text: 'Failed to run compiler to get IR code'}];
+            return {
+                asm: [{text: 'Failed to run compiler to get IR code'}],
+            };
         }
-        const ir = await this.processIrOutput(output, filters);
-        return ir.asm;
+        const ir = await this.processIrOutput(output, irOptions, filters);
+        return {
+            asm: ir.asm,
+        };
     }
 
-    override getIrOutputFilename(inputFilename: string, filters: ParseFiltersAndOutputOptions): string {
+    override getIrOutputFilename(inputFilename: string): string {
         return this.filename(path.dirname(inputFilename) + '/output.s.obj');
     }
 
-    override optionsForFilter(filters, outputFilename) {
+    override optionsForFilter(filters: ParseFiltersAndOutputOptions, outputFilename: string) {
         const options = super.optionsForFilter(filters, outputFilename);
 
         // Force the debugging info flag or we can't source locations.

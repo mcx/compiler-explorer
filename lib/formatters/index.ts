@@ -22,11 +22,18 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {makeKeyedTypeGetter} from '../keyed-type';
+import type {Keyable} from '../keyed-type.interfaces.js';
+import {makeKeyedTypeGetter} from '../keyed-type.js';
 
-import * as all from './_all';
+import * as all from './_all.js';
+import type {FormatterInfo} from './base.interfaces.js';
+import {BaseFormatter} from './base.js';
 
-export {BaseFormatter} from './base';
-export * from './_all';
+export {BaseFormatter} from './base.js';
+export * from './_all.js';
 
-export const getFormatterTypeByKey = makeKeyedTypeGetter('formatter', all);
+type FormatterClass = {
+    new (opts: FormatterInfo): BaseFormatter;
+} & Keyable;
+
+export const getFormatterTypeByKey = makeKeyedTypeGetter<FormatterClass>('formatter', all);

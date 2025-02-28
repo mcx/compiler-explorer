@@ -22,21 +22,25 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
-import fs from 'fs-extra';
+import fs from 'node:fs/promises';
 
-import {ArtifactType} from '../../types/tool.interfaces';
-import {BaseCompiler} from '../base-compiler';
-import {AsmParserBeebAsm} from '../parsers/asm-parser-beebasm';
-import * as utils from '../utils';
+import type {ExecutionOptionsWithEnv} from '../../types/compilation/compilation.interfaces.js';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import {ArtifactType} from '../../types/tool.interfaces.js';
+import {addArtifactToResult} from '../artifact-utils.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {CompilationEnvironment} from '../compilation-env.js';
+import {AsmParserBeebAsm} from '../parsers/asm-parser-beebasm.js';
+import * as utils from '../utils.js';
 
 export class BeebAsmCompiler extends BaseCompiler {
     static get key() {
         return 'beebasm';
     }
 
-    constructor(compilerInfo, env) {
+    constructor(compilerInfo: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(compilerInfo, env);
 
         this.asm = new AsmParserBeebAsm(this.compilerProps);
@@ -50,7 +54,12 @@ export class BeebAsmCompiler extends BaseCompiler {
         return [];
     }
 
-    override async runCompiler(compiler, options, inputFilename, execOptions) {
+    override async runCompiler(
+        compiler: string,
+        options: string[],
+        inputFilename: string,
+        execOptions: ExecutionOptionsWithEnv,
+    ) {
         if (!execOptions) {
             execOptions = this.getDefaultExecOptions();
         }
@@ -68,7 +77,7 @@ export class BeebAsmCompiler extends BaseCompiler {
 
         if (compilerExecResult.stdout.length > 0) {
             const outputFilename = this.getOutputFilename(dirPath, this.outputFilebase);
-            fs.writeFileSync(outputFilename, compilerExecResult.stdout);
+            await fs.writeFile(outputFilename, compilerExecResult.stdout);
             compilerExecResult.stdout = '';
         }
 
@@ -77,7 +86,7 @@ export class BeebAsmCompiler extends BaseCompiler {
         if (result.code === 0 && options.includes('-v')) {
             const diskfile = path.join(dirPath, 'disk.ssd');
             if (await utils.fileExists(diskfile)) {
-                await this.addArtifactToResult(result, diskfile, ArtifactType.bbcdiskimage);
+                await addArtifactToResult(result, diskfile, ArtifactType.bbcdiskimage);
 
                 if (!hasBootOption) {
                     if (!result.hints) result.hints = [];
@@ -101,7 +110,7 @@ export class BeebAsmCompiler extends BaseCompiler {
         return result;
     }
 
-    override isCfgCompiler(/*compilerVersion: string*/): boolean {
+    override isCfgCompiler(): boolean {
         return true;
     }
 }

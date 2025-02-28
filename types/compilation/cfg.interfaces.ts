@@ -24,18 +24,18 @@
 
 // TODO(jeremy-rifkin): re-visit all the types here once the back-end is more typescripted
 
+export type EdgeColor = 'red' | 'green' | 'blue' | 'grey';
+
 export type EdgeDescriptor = {
     from: string;
     to: string;
     arrows: string; // <- useless
-    color: string;
+    color: EdgeColor;
 };
 
 export type NodeDescriptor = {
-    color: string; // <- useless
     id: string; // typically label for the bb
     label: string; // really the source
-    shape: string; // <- useless
 };
 
 export type AnnotatedNodeDescriptor = NodeDescriptor & {

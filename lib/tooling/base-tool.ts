@@ -22,21 +22,22 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
 import PromClient from 'prom-client';
 import _ from 'underscore';
 
-import {ExecutionOptions} from '../../types/compilation/compilation.interfaces';
-import {UnprocessedExecResult} from '../../types/execution/execution.interfaces';
-import {Library, SelectedLibraryVersion} from '../../types/libraries/libraries.interfaces';
-import {ResultLine} from '../../types/resultline/resultline.interfaces';
-import {ToolInfo, ToolResult} from '../../types/tool.interfaces';
-import * as exec from '../exec';
-import {logger} from '../logger';
-import {parseOutput} from '../utils';
+import {CompilationInfo, ExecutionOptions} from '../../types/compilation/compilation.interfaces.js';
+import {UnprocessedExecResult} from '../../types/execution/execution.interfaces.js';
+import {SelectedLibraryVersion} from '../../types/libraries/libraries.interfaces.js';
+import {ResultLine} from '../../types/resultline/resultline.interfaces.js';
+import {ToolInfo, ToolResult} from '../../types/tool.interfaces.js';
+import * as exec from '../exec.js';
+import {logger} from '../logger.js';
+import {OptionsHandlerLibrary} from '../options-handler.js';
+import {parseOutput} from '../utils.js';
 
-import {ITool, ToolEnv} from './base-tool.interface';
+import {ITool, ToolEnv} from './base-tool.interface.js';
 
 const toolCounter = new PromClient.Counter({
     name: 'tool_invocations_total',
@@ -46,7 +47,7 @@ const toolCounter = new PromClient.Counter({
 
 export class BaseTool implements ITool {
     public readonly tool: ToolInfo;
-    private env: ToolEnv;
+    protected env: ToolEnv;
     protected addOptionsToToolArgs = true;
     public readonly id: string;
     public readonly type: string;
@@ -62,7 +63,7 @@ export class BaseTool implements ITool {
     getUniqueFilePrefix() {
         const timestamp = process.hrtime();
         const timestamp_str = '_' + timestamp[0] * 1000000 + timestamp[1] / 1000;
-        return this.tool.id.replace(/[^\da-z]/gi, '_') + timestamp_str + '_';
+        return this.tool.id.replaceAll(/[^\da-z]/gi, '_') + timestamp_str + '_';
     }
 
     isCompilerExcluded(compilerId: string, compilerProps: ToolEnv['compilerProps']): boolean {
@@ -110,7 +111,7 @@ export class BaseTool implements ITool {
     }
 
     // mostly copy&paste from base-compiler.js
-    findLibVersion(selectedLib: SelectedLibraryVersion, supportedLibraries: Record<string, Library>) {
+    findLibVersion(selectedLib: SelectedLibraryVersion, supportedLibraries: Record<string, OptionsHandlerLibrary>) {
         const foundLib = _.find(supportedLibraries, (o, libId) => libId === selectedLib.id);
         if (!foundLib) return false;
 
@@ -118,7 +119,10 @@ export class BaseTool implements ITool {
     }
 
     // mostly copy&paste from base-compiler.js
-    getIncludeArguments(libraries: SelectedLibraryVersion[], supportedLibraries: Record<string, Library>): string[] {
+    getIncludeArguments(
+        libraries: SelectedLibraryVersion[],
+        supportedLibraries: Record<string, OptionsHandlerLibrary>,
+    ): string[] {
         const includeFlag = '-I';
 
         return libraries.flatMap(selectedLib => {
@@ -129,7 +133,10 @@ export class BaseTool implements ITool {
         });
     }
 
-    getLibraryOptions(libraries: SelectedLibraryVersion[], supportedLibraries: Record<string, Library>): string[] {
+    getLibraryOptions(
+        libraries: SelectedLibraryVersion[],
+        supportedLibraries: Record<string, OptionsHandlerLibrary>,
+    ): string[] {
         return libraries.flatMap(selectedLib => {
             const foundVersion = this.findLibVersion(selectedLib, supportedLibraries);
             if (!foundVersion) return [];
@@ -139,11 +146,11 @@ export class BaseTool implements ITool {
     }
 
     async runTool(
-        compilationInfo: Record<any, any>,
+        compilationInfo: CompilationInfo,
         inputFilepath?: string,
         args?: string[],
         stdin?: string,
-        supportedLibraries?: Record<string, Library>,
+        supportedLibraries?: Record<string, OptionsHandlerLibrary>,
     ) {
         if (this.tool.name) {
             toolCounter.inc({

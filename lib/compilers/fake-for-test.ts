@@ -24,11 +24,19 @@
 
 import _ from 'underscore';
 
-import {ICompiler} from '../../types/compiler.interfaces';
-import {Language} from '../../types/languages.interfaces';
-import {CompilerArguments} from '../compiler-arguments';
+import {
+    ActiveTool,
+    BypassCache,
+    ExecutionParams,
+    FiledataPair,
+} from '../../types/compilation/compilation.interfaces.js';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {SelectedLibraryVersion} from '../../types/libraries/libraries.interfaces.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {CompilerArguments} from '../compiler-arguments.js';
 
-export class FakeCompiler implements ICompiler {
+export class FakeCompiler {
     public possibleArguments: CompilerArguments;
     public lang: any;
     private compiler: any;
@@ -38,7 +46,7 @@ export class FakeCompiler implements ICompiler {
         return 'fake-for-test';
     }
 
-    constructor(info) {
+    constructor(info: Partial<PreliminaryCompilerInfo>) {
         this.compiler = Object.assign(
             {
                 id: 'fake-for-test',
@@ -49,10 +57,10 @@ export class FakeCompiler implements ICompiler {
         );
         this.lang = {id: this.compiler.lang, name: `Language ${this.compiler.lang}`};
         this.info = info;
-        this.possibleArguments = new CompilerArguments();
+        this.possibleArguments = new CompilerArguments('fake-for-test');
     }
 
-    initialise(mtime: Date, clientOptions: any, isPrediscovered: boolean) {
+    initialise(mtime: Date, clientOptions: any, isPrediscovered: boolean): Promise<BaseCompiler | null> {
         throw new Error('Method not implemented.');
     }
 
@@ -64,27 +72,40 @@ export class FakeCompiler implements ICompiler {
         return {};
     }
 
+    getDefaultExecOptions() {
+        return {};
+    }
+
     getRemote() {
         return null;
     }
 
-    compile(source, options, backendOptions, filters, bypassCache, tools, executionParameters, libraries, files) {
+    compile(
+        source: string,
+        options: string[],
+        backendOptions: Record<string, any>,
+        filters: ParseFiltersAndOutputOptions,
+        bypassCache: BypassCache,
+        tools: ActiveTool[],
+        executeParameters: ExecutionParams,
+        libraries: SelectedLibraryVersion[],
+        files?: FiledataPair[],
+    ) {
         const inputBody = {
             input: {
                 source: source,
                 options: options,
                 backendOptions: backendOptions,
                 filters: filters,
-                files: undefined,
+                files: files,
+                tools: tools,
             },
         };
-
-        if (files) inputBody.input.files = files;
 
         return Promise.resolve(_.extend(this.info.fakeResult || {}, inputBody));
     }
 
-    cmake(files, options) {
+    cmake(files: FiledataPair[], options: string[]) {
         return Promise.resolve(
             _.extend(this.info.fakeResult || {}, {
                 input: {

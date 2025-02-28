@@ -1,13 +1,15 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
-import {ParsedAsmResult} from '../../types/asmresult/asmresult.interfaces';
-import {TypicalExecutionFunc, UnprocessedExecResult} from '../../types/execution/execution.interfaces';
-import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces';
-import {logger} from '../logger';
-import {maskRootdir} from '../utils';
+import type {ParsedAsmResult} from '../../types/asmresult/asmresult.interfaces.js';
+import {CompilerInfo} from '../../types/compiler.interfaces.js';
+import type {TypicalExecutionFunc, UnprocessedExecResult} from '../../types/execution/execution.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {CompilationEnvironment} from '../compilation-env.js';
+import {logger} from '../logger.js';
+import {maskRootdir} from '../utils.js';
 
-import {IExternalParser} from './external-parser.interface';
+import {IExternalParser} from './external-parser.interface.js';
 
 const starterScriptName = 'dump-and-parse.sh';
 
@@ -15,10 +17,10 @@ export class ExternalParserBase implements IExternalParser {
     private readonly objdumperPath: string;
     private readonly parserPath: string;
     private readonly execFunc: TypicalExecutionFunc;
-    private compilerInfo;
+    private compilerInfo: CompilerInfo;
     private envInfo;
 
-    constructor(compilerInfo, envInfo, execFunc: TypicalExecutionFunc) {
+    constructor(compilerInfo: CompilerInfo, envInfo: CompilationEnvironment, execFunc: TypicalExecutionFunc) {
         this.compilerInfo = compilerInfo;
         this.envInfo = envInfo;
         this.objdumperPath = compilerInfo.objdumper;
@@ -42,6 +44,7 @@ export class ExternalParserBase implements IExternalParser {
         if (filters.trim) parameters.push('-whitespace');
         if (filters.libraryCode) parameters.push('-library_functions');
         if (filters.dontMaskFilenames) parameters.push('-dont_mask_filenames');
+        if (filters.debugCalls) parameters.push('-debug_calls');
 
         return parameters;
     }

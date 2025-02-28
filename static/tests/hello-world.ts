@@ -22,15 +22,14 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {ITestable} from './frontend-testing.interfaces';
-import {assert} from 'chai';
+import {ITestable} from './frontend-testing.interfaces.js';
 
 class HelloWorldTests implements ITestable {
     public readonly description: string = 'HelloWorld';
 
     public async run() {
         const person = true;
-        assert.equal(person, true);
+        person.should.be.true;
     }
 }
 

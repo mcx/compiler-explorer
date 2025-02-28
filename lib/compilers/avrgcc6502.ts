@@ -22,9 +22,13 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import path from 'path';
+import path from 'node:path';
 
-import {BaseCompiler} from '../base-compiler';
+import type {ExecutionOptionsWithEnv} from '../../types/compilation/compilation.interfaces.js';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {CompilationEnvironment} from '../compilation-env.js';
 
 export class AvrGcc6502Compiler extends BaseCompiler {
     private readonly avrgccpath: string;
@@ -35,7 +39,7 @@ export class AvrGcc6502Compiler extends BaseCompiler {
         return 'avrgcc6502';
     }
 
-    constructor(compilerInfo, env) {
+    constructor(compilerInfo: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(compilerInfo, env);
 
         this.avrgccpath = this.compilerProps<string>(`compiler.${this.compiler.id}.avrgccpath`);
@@ -44,9 +48,9 @@ export class AvrGcc6502Compiler extends BaseCompiler {
         this.outputFilebase = 'example';
     }
 
-    public override getOutputFilename(dirPath, outputFilebase, key) {
+    public override getOutputFilename(dirPath: string, outputFilebase: string, key?: any) {
         let filename;
-        if (key && key.backendOptions && key.backendOptions.customOutputFilename) {
+        if (key?.backendOptions?.customOutputFilename) {
             filename = key.backendOptions.customOutputFilename;
         } else {
             filename = `${outputFilebase}.6502.asm`;
@@ -54,16 +58,20 @@ export class AvrGcc6502Compiler extends BaseCompiler {
 
         if (dirPath) {
             return path.join(dirPath, filename);
-        } else {
-            return filename;
         }
+        return filename;
     }
 
-    protected override optionsForFilter(filters: object, outputFilename: string): string[] {
+    protected override optionsForFilter(filters: ParseFiltersAndOutputOptions, outputFilename: string): string[] {
         return [`-I${this.avrlibstdcpppath}`];
     }
 
-    public override async runCompiler(compiler, options, inputFilename, execOptions) {
+    public override async runCompiler(
+        compiler: string,
+        options: string[],
+        inputFilename: string,
+        execOptions: ExecutionOptionsWithEnv,
+    ) {
         if (!execOptions) {
             execOptions = this.getDefaultExecOptions();
         }

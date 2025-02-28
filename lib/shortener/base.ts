@@ -24,13 +24,12 @@
 
 import * as express from 'express';
 
-import {StorageBase} from '../storage';
+import {StorageBase} from '../storage/index.js';
 
 export abstract class BaseShortener {
     constructor(protected storageHandler: StorageBase) {}
 
-    // eslint-disable-next-line no-unused-vars
-    abstract handle(req: express.Request, res: express.Response);
+    abstract handle(req: express.Request, res: express.Response): void;
 
     static get key(): string {
         throw 'get key() must be overridden';

@@ -25,7 +25,7 @@
 import * as express from 'express';
 import request from 'request';
 
-import {BaseShortener} from './base';
+import {BaseShortener} from './base.js';
 
 export class TinyUrlShortener extends BaseShortener {
     override handle(req: express.Request, res: express.Response) {
@@ -34,7 +34,7 @@ export class TinyUrlShortener extends BaseShortener {
             url: 'https://tinyurl.com/api-create.php?url=' + encodeURIComponent(url),
             method: 'GET',
         };
-        const callback = (err, resp: request.Response, body) => {
+        const callback = (err: any, resp: request.Response, body: any) => {
             if (!err && resp.statusCode === 200) {
                 res.send({url: body});
             } else {

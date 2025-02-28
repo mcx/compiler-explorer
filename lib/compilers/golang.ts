@@ -24,11 +24,15 @@
 
 import _ from 'underscore';
 
-import {ResultLine} from '../../types/resultline/resultline.interfaces';
-import {BaseCompiler} from '../base-compiler';
-import * as utils from '../utils';
+import type {PreliminaryCompilerInfo} from '../../types/compiler.interfaces.js';
+import type {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import type {ResultLine} from '../../types/resultline/resultline.interfaces.js';
+import {unwrap} from '../assert.js';
+import {BaseCompiler} from '../base-compiler.js';
+import {CompilationEnvironment} from '../compilation-env.js';
+import * as utils from '../utils.js';
 
-import {ClangParser} from './argument-parsers';
+import {GolangParser} from './argument-parsers.js';
 
 // Each arch has a list of jump instructions in
 // Go source src/cmd/asm/internal/arch.
@@ -55,18 +59,30 @@ export class GolangCompiler extends BaseCompiler {
         return 'golang';
     }
 
-    constructor(compilerInfo, env) {
+    constructor(compilerInfo: PreliminaryCompilerInfo, env: CompilationEnvironment) {
         super(compilerInfo, env);
-        const goroot = this.compilerProps<string | undefined>(`compiler.${this.compiler.id}.goroot`);
-        const goarch = this.compilerProps<string | undefined>(`compiler.${this.compiler.id}.goarch`);
-        const goos = this.compilerProps<string | undefined>(`compiler.${this.compiler.id}.goos`);
+        const group = this.compiler.group;
+
+        const goroot = this.compilerProps<string | undefined>(
+            'goroot',
+            this.compilerProps<string | undefined>(`group.${group}.goroot`),
+        );
+        // GOARCH can be something like '386' which is read out as a number.
+        const goarch = this.compilerProps<string | number | undefined>(
+            'goarch',
+            this.compilerProps<string | undefined>(`group.${group}.goarch`),
+        );
+        const goos = this.compilerProps<string | undefined>(
+            'goos',
+            this.compilerProps<string | undefined>(`group.${group}.goos`),
+        );
 
         this.GOENV = {};
         if (goroot) {
             this.GOENV.GOROOT = goroot;
         }
         if (goarch) {
-            this.GOENV.GOARCH = goarch;
+            this.GOENV.GOARCH = goarch.toString();
         }
         if (goos) {
             this.GOENV.GOOS = goos;
@@ -110,7 +126,7 @@ export class GolangCompiler extends BaseCompiler {
             match = line.match(FUNC_RE);
             if (match) {
                 // Normalize function name.
-                func = match[1].replace(/[()*.]+/g, '_');
+                func = match[1].replaceAll(/[()*.]+/g, '_');
 
                 // It's possible for normalized function names to collide.
                 // Keep a count of collisions per function name. Labels get
@@ -212,28 +228,27 @@ export class GolangCompiler extends BaseCompiler {
         result.asm = this.convertNewGoL(out);
         result.stderr = [];
         result.stdout = utils.parseOutput(logging, result.inputFilename);
-        return Promise.all([result, '']);
+        return Promise.all([result, [], []]);
     }
 
     override getSharedLibraryPathsAsArguments() {
         return [];
     }
 
-    override optionsForFilter(filters, outputFilename, userOptions) {
+    override optionsForFilter(filters: ParseFiltersAndOutputOptions, outputFilename: string, userOptions?: string[]) {
         // If we're dealing with an older version...
         if (this.compiler.id === '6g141') {
             return ['tool', '6g', '-g', '-o', outputFilename, '-S'];
         }
 
         if (filters.binary) {
-            return ['build', '-o', outputFilename, '-gcflags=' + userOptions.join(' ')];
-        } else {
-            // Add userOptions to -gcflags to preserve previous behavior.
-            return ['build', '-o', outputFilename, '-gcflags=-S ' + userOptions.join(' ')];
+            return ['build', '-o', outputFilename, '-gcflags=' + unwrap(userOptions).join(' ')];
         }
+        // Add userOptions to -gcflags to preserve previous behavior.
+        return ['build', '-o', outputFilename, '-gcflags=-S ' + unwrap(userOptions).join(' ')];
     }
 
-    override filterUserOptions(userOptions) {
+    override filterUserOptions(userOptions: string[]) {
         if (this.compiler.id === '6g141') {
             return userOptions;
         }
@@ -242,13 +257,24 @@ export class GolangCompiler extends BaseCompiler {
     }
 
     override getDefaultExecOptions() {
-        return {
+        const options = {
             ...super.getDefaultExecOptions(),
+        };
+
+        options.env = {
+            ...options.env,
             ...this.GOENV,
         };
+
+        return options;
     }
 
-    override getArgumentParser() {
-        return ClangParser;
+    override getArgumentParserClass(): any {
+        return GolangParser;
+    }
+
+    override isCfgCompiler() {
+        // #6439: `gccgo` is ok, the default go compiler `gc` isn't
+        return !this.compiler.version.includes('go version');
     }
 }

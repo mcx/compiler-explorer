@@ -38,11 +38,14 @@ export type Widen<T> = T extends T
       }[keyof TypeMap]
     : T;
 
+// TODO(jeremy-rifkin): I think the types could use some work here.
+// Maybe props<string>(property) should be string | undefined.
+
 function superficialGetter(property: string, defaultValue?: undefined): PropertyValue;
 function superficialGetter<T extends PropertyValue>(property: string, defaultValue: Widen<T>): typeof defaultValue;
 function superficialGetter<T extends PropertyValue>(property: string, defaultValue?: unknown): T;
 function superficialGetter(property: string, defaultValue?: unknown): unknown {
-    return; // eslint-disable-line no-useless-return
+    return;
 }
 
 export type PropertyGetter = typeof superficialGetter;

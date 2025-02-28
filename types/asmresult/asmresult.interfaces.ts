@@ -1,6 +1,6 @@
 export type AsmResultSource = {
     file: string | null;
-    line?: number;
+    line: number | null;
     column?: number;
     mainsource?: boolean;
 };
@@ -34,11 +34,11 @@ export type ParsedAsmResultLine = {
 export type ParsedAsmResult = {
     asm: ParsedAsmResultLine[];
     labelDefinitions?: Record<string, number>;
-    parsingTime?: string;
+    parsingTime?: number;
     filteredCount?: number;
     externalParserUsed?: boolean;
     objdumpTime?: number;
-    execTime?: string;
+    execTime?: number;
     languageId?: string;
 };
 

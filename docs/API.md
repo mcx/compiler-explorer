@@ -73,7 +73,8 @@ To specify a compilation request as a JSON document, post it as the appropriate 
              "intel": true,
              "labels": true,
              "libraryCode": false,
-             "trim": false
+             "trim": false,
+             "debugCalls": false
         },
         "tools": [
              {"id":"clangtidytrunk", "args":"-checks=*"}
@@ -98,7 +99,18 @@ Execution Only request example:
         "userArguments": "-O3",
         "executeParameters": {
             "args": ["arg1", "arg2"],
-            "stdin": "hello, world!"
+            "stdin": "hello, world!",
+            "runtimeTools": [
+              {
+                "name": "env",
+                "options": [
+                  {
+                    "name": "MYENV",
+                    "value": "123"
+                  }
+                ]
+              }
+            ]
         },
         "compilerOptions": {
             "executorRequest": true
@@ -120,9 +132,23 @@ The filters are a JSON object with `true`/`false` values. If not supplied, defau
 filters override their default values. The `compilerOptions` is used to pass extra arguments to the back end, and is
 probably not useful for most REST users.
 
-To force a cache bypass, set `bypassCache` in the root of the request to `true`.
+To force a cache bypass, `bypassCache` can be set. This accepts an enum value according to:
 
-Filters include `binary`, `binaryObject`, `labels`, `intel`, `directives` and `demangle`, which correspond to the UI buttons on the HTML version.
+```ts
+export enum BypassCache {
+  None = 0,
+  Compilation = 1,
+  Execution = 2,
+}
+```
+
+If bypass compile cache is specified and an execution is to happen, the execution cache will also be bypassed.
+
+Note: `bypassCache` previously accepted a boolean. The enum values have been carefully chosen for backwards
+compatibility.
+
+Filters include `binary`, `binaryObject`, `labels`, `intel`, `directives` and `demangle`, which correspond to the UI
+buttons on the HTML version.
 
 With the tools array you can ask CE to execute certain tools available for the current compiler, and also supply
 arguments for this tool.
@@ -158,11 +184,12 @@ structure:
 
 The name property corresponds to the `<formatter>` when requesting `POST /api/format/<formatter>`. The `type` key in the
 JSON request corresponds to one of the `formatters.<key>.type` found in
-https://github.com/compiler-explorer/compiler-explorer/blob/main/etc/config/compiler-explorer.amazon.properties#L43
+[compiler-explorer.amazon.properties:43](../etc/config/compiler-explorer.amazon.properties#L43)
 
 ### `POST /api/format/<formatter>` - perform a formatter run
 
-Formats a piece of code according to the given base style using the provided formatter
+Formats a piece of code according to the given base style using the provided formatter. Be aware that this endpoint only
+accepts JSON (e.g `content-type: application/json`).
 
 Formatters available can be found with `GET /api/formats`
 
@@ -185,6 +212,20 @@ The returned JSON body has the following object structure:
 ```
 
 In cases of internal code formatter failure an additional field named `throw` is also provided and set to true.
+
+### `GET /api/asm/<instructionSet>/<opcode>` - get documentation for an opcode
+
+Returns documentation for given `opcode` in an `instructionSet` (an attribute of a compiler).
+
+```JSON
+{
+  "tooltip": "Load SIMD&FP Register (immediate offset). This instruction loads an element from memory, and writes the result as a scalar to the SIMD&FP register. The address that is used for the load is calculated from a base register value, a signed immediate offset, and an optional offset that is a multiple of the element size.",
+  "html": "<p>Load SIMD&amp;FP Register (immediate offset). This instruction loads an element from memory, and writes the result as a scalar to the SIMD&amp;FP register. The address that is used for the load is calculated from a base register value, a signed immediate offset, and an optional offset that is a multiple of the element size.</p><p>Depending on the settings in the <xref linkend=\"AArch64.cpacr_el1\">CPACR_EL1</xref>, <xref linkend=\"AArch64.cptr_el2\">CPTR_EL2</xref>, and <xref linkend=\"AArch64.cptr_el3\">CPTR_EL3</xref> registers, and the current Security state and Exception level, an attempt to execute the instruction might be trapped.</p>",
+  "url": "https://developer.arm.com/documentation/ddi0602/latest/Base-Instructions/"
+}
+```
+
+In non-JSON version, this endpoint returns only the documentation in HTML format.
 
 # Non-REST API's
 
@@ -254,9 +295,8 @@ If JSON is present in the request's `Accept` header, the compilation results are
 
 ### `POST /api/shortener` - saves given state _forever_ to a shortlink and returns the unique id for the link
 
-The body of this post should be in the format of a
-[ClientState](https://github.com/compiler-explorer/compiler-explorer/blob/main/lib/clientstate.js) Be sure that the
-Content-Type of your post is application/json
+The body of this post should be in the format of a [ClientState](../lib/clientstate.ts) Be sure that the Content-Type of
+your post is application/json
 
 An example of one the easiest forms of a clientstate:
 
@@ -297,7 +337,8 @@ Returns:
 }
 ```
 
-The storedId can be used in the api call /api/shortlinkinfo/<id> and to open in the website with a /z/<id> shortlink.
+The storedId can be used in the api call `/api/shortlinkinfo/<id>` and to open in the website with a `/z/<id>`
+shortlink.
 
 ### `GET /z/<id>` - Opens the website from a shortlink
 
@@ -307,14 +348,16 @@ This call opens the website in a state that was previously saved using the built
 
 This call returns plain/text for the code that was previously saved using the built-in shortener.
 
-If there were multiple editors during the saved session, you can retrieve them by setting <sourceid> to 1, 2, 3,
-etcetera, otherwise <sourceid> can be set to 1.
+If there were multiple editors during the saved session, you can retrieve them by setting `<sourceid>` to 1, 2, 3,
+etcetera, otherwise `<sourceid>` can be set to 1.
 
 ### `GET /clientstate/<base64>` - Opens the website in a given state
 
 This call is to open the website with a given state (without having to store the state first with /api/shortener)
 Instead of sending the ClientState JSON in the post body, it will have to be encoded with base64 and attached directly
-onto the URL.
+onto the URL. It is possible to compress the JSON string with the zlib deflate method (compression used by gzip;
+available for many programming languages like [javascript](https://nodejs.org/api/zlib.html)). It is automatically
+detected.
 
 To avoid problems in reading base64 by the API, some characters must be kept in unicode. Therefore, before calling the
 API, it is necessary to replace these characters with their respective unicodes. A suggestion is to use the Regex
@@ -332,3 +375,5 @@ Here are some examples of projects using the Compiler Explorer API:
 - [QCompilerExplorer - frontend in Qt](https://github.com/Waqar144/QCompilerExplorer) (C++)
 - [Emacs client - compiler-explorer.el](https://github.com/mkcms/compiler-explorer.el)
 - [compiler-explorer.nvim by krady21](https://github.com/krady21/compiler-explorer.nvim) (Lua)
+- [ForCompile](https://github.com/gha3mi/forcompile) - A Fortran library to access the API by
+  [gha3mi](https://github.com/gha3mi) (Fortran)

@@ -23,9 +23,17 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 import * as monaco from 'monaco-editor';
-import {Themes} from './themes';
+import {Themes} from './themes.js';
 
-export type ColourScheme = 'rainbow' | 'rainbow2' | 'earth' | 'green-blue' | 'gray-shade' | 'rainbow-dark';
+export type ColourScheme =
+    | 'rainbow'
+    | 'rainbow2'
+    | 'earth'
+    | 'green-blue'
+    | 'gray-shade'
+    | 'rainbow-dark'
+    | 'soft-rainbow-dark'
+    | 'pink';
 
 export type AppTheme = Themes | 'all';
 
@@ -56,25 +64,36 @@ export const schemes: ColourSchemeInfo[] = [
         name: 'gray-shade',
         desc: 'Gray shades',
         count: 4,
-        themes: ['dark', 'darkplus'],
+        themes: ['dark', 'darkplus', 'real-dark', 'onedark'],
     },
     {
         name: 'rainbow-dark',
         desc: 'Dark Rainbow',
         count: 12,
-        themes: ['dark', 'darkplus'],
+        themes: ['dark', 'darkplus', 'real-dark', 'onedark'],
+    },
+    {
+        name: 'soft-rainbow-dark',
+        desc: 'Soft Dark Rainbow',
+        count: 11,
+        themes: ['dark', 'darkplus', 'real-dark', 'onedark'],
+    },
+    {
+        name: 'pink',
+        desc: 'Pink',
+        count: 5,
+        themes: ['pink'],
     },
 ];
 
 export function applyColours(
-    editor: monaco.editor.ICodeEditor,
     colours: Record<number, number>,
     schemeName: string,
-    previousDecorations: string[]
-): string[] {
+    editorDecorations: monaco.editor.IEditorDecorationsCollection,
+): void {
     const scheme = schemes.find(scheme => scheme.name === schemeName) ?? schemes[0];
     const newDecorations: monaco.editor.IModelDeltaDecoration[] = Object.entries(colours).map(([line, index]) => {
-        const realLineNumber = parseInt(line) + 1;
+        const realLineNumber = Number.parseInt(line) + 1;
         return {
             range: new monaco.Range(realLineNumber, 1, realLineNumber, 1),
             options: {
@@ -84,5 +103,5 @@ export function applyColours(
         };
     });
 
-    return editor.deltaDecorations(previousDecorations, newDecorations);
+    editorDecorations.set(newDecorations);
 }

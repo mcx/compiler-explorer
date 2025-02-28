@@ -22,16 +22,17 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import _ from 'underscore';
 
-import {LanguageKey} from '../types/languages.interfaces';
+import {isString} from '../shared/common-utils.js';
+import type {LanguageKey} from '../types/languages.interfaces.js';
 
-import {logger} from './logger';
-import {PropertyGetter, PropertyValue, Widen} from './properties.interfaces';
-import {toProperty} from './utils';
+import {logger} from './logger.js';
+import type {PropertyGetter, PropertyValue, Widen} from './properties.interfaces.js';
+import {toProperty} from './utils.js';
 
 let properties: Record<string, Record<string, PropertyValue>> = {};
 
@@ -43,11 +44,13 @@ function findProps(base: string, elem: string): Record<string, PropertyValue> {
     return properties[`${base}.${elem}`];
 }
 
-function debug(string) {
-    if (propDebug) logger.info(`prop: ${string}`);
+function debug(str: string) {
+    if (propDebug) logger.info(`prop: ${str}`);
 }
 
-export function get(base: string, property: string, defaultValue: undefined): PropertyValue;
+export type PropFunc = (s: string, a?: any) => any;
+
+export function get(base: string, property: string, defaultValue: any): PropertyValue;
 export function get<T extends PropertyValue>(
     base: string,
     property: string,
@@ -71,8 +74,8 @@ export function get(base: string, property: string, defaultValue?: unknown): unk
 
 export type RawPropertiesGetter = typeof get;
 
-export function parseProperties(blob, name) {
-    const props = {};
+export function parseProperties(blob: string, name: string): Record<string, PropertyValue> {
+    const props: Record<string, PropertyValue> = {};
     for (const [index, lineOrig] of blob.split('\n').entries()) {
         const line = lineOrig.replace(/#.*/, '').trim();
         if (!line) continue;
@@ -82,7 +85,7 @@ export function parseProperties(blob, name) {
             continue;
         }
         const prop = split[1].trim();
-        let val = split[2].trim();
+        let val: string | number | boolean = split[2].trim();
         // hack to avoid applying toProperty to version properties
         // so that they're not parsed as numbers
         if (!prop.endsWith('.version') && !prop.endsWith('.semver')) {
@@ -94,9 +97,9 @@ export function parseProperties(blob, name) {
     return props;
 }
 
-export function initialize(directory, hier) {
+export function initialize(directory: string, hier: string[]) {
     if (hier === null) throw new Error('Must supply a hierarchy array');
-    hierarchy = _.map(hier, x => x.toLowerCase());
+    hierarchy = hier.map((x: string) => x.toLowerCase());
     logger.info(`Reading properties from ${directory} with hierarchy ${hierarchy}`);
     const endsWith = /\.properties$/;
     const propertyFiles = fs.readdirSync(directory).filter(filename => filename.match(endsWith));
@@ -116,10 +119,8 @@ export function reset() {
     logger.debug('Properties reset');
 }
 
-export function propsFor(base): PropertyGetter {
-    return function (property, defaultValue) {
-        return get(base, property, defaultValue);
-    };
+export function propsFor(base: string): PropertyGetter {
+    return (property: string, defaultValue: any) => get(base, property, defaultValue);
 }
 
 // function mappedOf(fn, funcA, funcB) {
@@ -128,7 +129,7 @@ export function propsFor(base): PropertyGetter {
 //     return funcB();
 // }
 
-type LanguageDef = {
+export type LanguageDef = {
     id: string;
 };
 
@@ -191,6 +192,8 @@ export class CompilerProps {
     // const i = this.compilerProps(languages, property, undefined, (x) => ["foobar"]); // Record<LanguageKey, string[]>
     // const j = this.compilerProps(languages, property, 42, (x) => ["foobar"]);//Record<LanguageKey, number | string[]>
 
+    // TODO(jeremy-rifkin): I think the types could use some work here.
+    // Maybe this.compilerProps<number>(lang, property) should be number | undefined.
     // general overloads
     get(base: string, property: string, defaultValue?: undefined, fn?: undefined): PropertyValue;
     get<T extends PropertyValue>(
@@ -256,19 +259,17 @@ export class CompilerProps {
         if (_.isEmpty(langs)) {
             return map_fn(this.ceProps(key, defaultValue));
         }
-        if (_.isString(langs)) {
+        if (isString(langs)) {
             if (this.propsByLangId[langs]) {
                 return map_fn(this.$getInternal(langs, key, defaultValue), this.languages[langs]);
-            } else {
-                logger.error(`Tried to pass ${langs} as a language ID`);
-                return map_fn(defaultValue);
             }
-        } else {
-            return _.chain(langs)
-                .map(lang => [lang.id, map_fn(this.$getInternal(lang.id, key, defaultValue), lang)])
-                .object()
-                .value();
+            logger.error(`Tried to pass ${langs} as a language ID`);
+            return map_fn(defaultValue);
         }
+        return _.chain(langs)
+            .map(lang => [lang.id, map_fn(this.$getInternal(lang.id, key, defaultValue), lang)])
+            .object()
+            .value();
     }
 }
 
@@ -276,6 +277,10 @@ export function setDebug(debug: boolean) {
     propDebug = debug;
 }
 
-export function fakeProps(fake: Record<string, PropertyValue>): PropertyGetter {
+export function fakeProps(fake: Record<string, PropertyValue>): PropFunc {
     return (prop, def) => (fake[prop] === undefined ? def : fake[prop]);
+}
+
+export function getRawProperties() {
+    return properties;
 }

@@ -22,12 +22,12 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-'use strict';
+import * as monaco from 'monaco-editor';
 
-const monaco = require('monaco-editor');
-const cpp = require('monaco-editor/esm/vs/basic-languages/cpp/cpp');
+// @ts-ignore  "Could not find a declaration file"
+import * as cpp from 'monaco-editor/esm/vs/basic-languages/cpp/cpp';
 
-function definition() {
+function definition(): monaco.languages.IMonarchLanguage {
     return {
         defaultToken: 'invalid', // for debugging
 
@@ -209,4 +209,4 @@ monaco.languages.register({id: 'carbon'});
 monaco.languages.setMonarchTokensProvider('carbon', def);
 monaco.languages.setLanguageConfiguration('carbon', cpp.conf);
 
-export = def;
+export default def;

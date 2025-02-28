@@ -22,36 +22,38 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {LLVMOptPipelineResults} from '../../types/compilation/llvm-opt-pipeline-output.interfaces';
-import {ResultLine} from '../../types/resultline/resultline.interfaces';
-import {logger} from '../logger';
-import {SymbolStore} from '../symbol-store';
-import * as utils from '../utils';
+import {OptPipelineResults} from '../../types/compilation/opt-pipeline-output.interfaces.js';
+import {UnprocessedExecResult} from '../../types/execution/execution.interfaces.js';
+import {ResultLine} from '../../types/resultline/resultline.interfaces.js';
+import {logger} from '../logger.js';
+import {SymbolStore} from '../symbol-store.js';
+import * as utils from '../utils.js';
 
-import {BaseDemangler} from './base';
-import {PrefixTree} from './prefix-tree';
+import {BaseDemangler} from './base.js';
+import {PrefixTree} from './prefix-tree.js';
 
 export class LLVMIRDemangler extends BaseDemangler {
-    llvmSymbolRE = /@([\w$.]+)/gi;
+    // Identifiers can be quoted: https://llvm.org/docs/LangRef.html#identifiers
+    llvmSymbolRE = /@(?<symbol>[\w$.]+)/gi;
+    llvmQuotedSymbolRE = /@"(?<symbol>[^"]+)"/gi;
 
     static get key() {
         return 'llvm-ir';
     }
 
-    override collectLabels() {
+    protected override collectLabels() {
         for (const line of this.result.asm) {
             const text = line.text;
             if (!text) continue;
 
-            const matches = [...text.matchAll(this.llvmSymbolRE)];
+            const matches = [...text.matchAll(this.llvmSymbolRE), ...text.matchAll(this.llvmQuotedSymbolRE)];
             for (const match of matches) {
-                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                this.symbolstore!.add(match[1]);
+                this.symbolstore!.add(match.groups!.symbol);
             }
         }
     }
 
-    collect(result: {asm: ResultLine[]}) {
+    public collect(result: {asm: ResultLine[]}) {
         this.result = result;
         if (!this.symbolstore) {
             this.symbolstore = new SymbolStore();
@@ -59,7 +61,7 @@ export class LLVMIRDemangler extends BaseDemangler {
         }
     }
 
-    processPassOutput(passOutput: LLVMOptPipelineResults, demanglerOutput) {
+    protected processPassOutput(passOutput: OptPipelineResults, demanglerOutput: UnprocessedExecResult) {
         if (demanglerOutput.stdout.length === 0 && demanglerOutput.stderr.length > 0) {
             logger.error(`Error executing demangler ${this.demanglerExe}`, demanglerOutput);
             return passOutput;
@@ -72,19 +74,18 @@ export class LLVMIRDemangler extends BaseDemangler {
         }
         for (let i = 0; i < lines.length; ++i) this.addTranslation(this.input[i], lines[i]);
 
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const translations = [...this.symbolstore!.listTranslations(), ...this.othersymbols.listTranslations()].filter(
             elem => elem[0] !== elem[1],
         );
         if (translations.length > 0) {
             const tree = new PrefixTree(translations);
             for (const [functionName, passes] of Object.entries(passOutput)) {
-                const demangledFunctionName = tree.replaceAll(functionName);
+                const demangledFunctionName = tree.replaceAll(functionName).newText;
                 for (const pass of passes) {
-                    pass.name = tree.replaceAll(pass.name); // needed at least for full module mode
+                    pass.name = tree.replaceAll(pass.name).newText; // needed at least for full module mode
                     for (const dump of [pass.before, pass.after]) {
                         for (const line of dump) {
-                            line.text = tree.replaceAll(line.text);
+                            line.text = tree.replaceAll(line.text).newText;
                         }
                     }
                 }
@@ -95,7 +96,7 @@ export class LLVMIRDemangler extends BaseDemangler {
         return passOutput;
     }
 
-    async demangleLLVMPasses(passOutput: LLVMOptPipelineResults) {
+    public async demangleLLVMPasses(passOutput: OptPipelineResults) {
         const options = {
             input: this.getInput(),
         };

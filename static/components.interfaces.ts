@@ -22,10 +22,15 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {CompilerOutputOptions} from '../types/features/filters.interfaces';
-import {CfgState} from './panes/cfg-view.interfaces';
-import {LLVMOptPipelineViewState} from './panes/llvm-opt-pipeline.interfaces';
-import {GccDumpViewState} from './panes/gccdump-view.interfaces';
+import {CompilerOutputOptions} from '../types/features/filters.interfaces.js';
+import {ConfiguredOverrides} from './compilation/compiler-overrides.interfaces.js';
+import {ConfiguredRuntimeTools} from './execution/execution.interfaces.js';
+import {CfgState} from './panes/cfg-view.interfaces.js';
+import {ClangirState} from './panes/clangir-view.interfaces.js';
+import {GccDumpViewState} from './panes/gccdump-view.interfaces.js';
+import {IrState} from './panes/ir-view.interfaces.js';
+import {OptPipelineViewState} from './panes/opt-pipeline.interfaces.js';
+import {MonacoPaneState} from './panes/pane.interfaces.js';
 export const COMPILER_COMPONENT_NAME = 'compiler';
 export const EXECUTOR_COMPONENT_NAME = 'executor';
 export const EDITOR_COMPONENT_NAME = 'codeEditor';
@@ -36,6 +41,7 @@ export const TOOL_COMPONENT_NAME = 'tool';
 export const TOOL_INPUT_VIEW_COMPONENT_NAME = 'toolInputView';
 export const DIFF_VIEW_COMPONENT_NAME = 'diff';
 export const OPT_VIEW_COMPONENT_NAME = 'opt';
+export const STACK_USAGE_VIEW_COMPONENT_NAME = 'stackusage';
 export const FLAGS_VIEW_COMPONENT_NAME = 'flags';
 export const PP_VIEW_COMPONENT_NAME = 'pp';
 export const AST_VIEW_COMPONENT_NAME = 'ast';
@@ -43,6 +49,9 @@ export const GCC_DUMP_VIEW_COMPONENT_NAME = 'gccdump';
 export const CFG_VIEW_COMPONENT_NAME = 'cfg';
 export const CONFORMANCE_VIEW_COMPONENT_NAME = 'conformance';
 export const IR_VIEW_COMPONENT_NAME = 'ir';
+export const CLANGIR_VIEW_COMPONENT_NAME = 'clangir';
+export const OPT_PIPELINE_VIEW_COMPONENT_NAME = 'optPipelineView';
+// Historical LLVM-specific name preserved to keep old links working
 export const LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME = 'llvmOptPipelineView';
 export const RUST_MIR_VIEW_COMPONENT_NAME = 'rustmir';
 export const HASKELL_CORE_VIEW_COMPONENT_NAME = 'haskellCore';
@@ -60,15 +69,16 @@ export interface ComponentConfig<S> {
     componentState: S;
 }
 
-type StateWithLanguage = {lang: string};
-type StateWithEditor = {source: number};
-type StateWithTree = {tree: number};
-type StateWithId = {id: number};
-type EmptyState = Record<never, never>;
+export type StateWithLanguage = {lang: string};
+// TODO(#4490 The War of The Types) We should normalize state types
+export type StateWithEditor = {source: string | number};
+export type StateWithTree = {tree: number};
+export type StateWithId = {id: number};
+export type EmptyState = Record<never, never>;
 
 export type EmptyCompilerState = StateWithLanguage & StateWithEditor;
 export type PopulatedCompilerState = StateWithEditor & {
-    filters: CompilerOutputOptions;
+    filters: CompilerOutputOptions | undefined;
     options: unknown;
     compiler: string;
     libs?: unknown;
@@ -76,40 +86,68 @@ export type PopulatedCompilerState = StateWithEditor & {
 };
 export type CompilerForTreeState = StateWithLanguage & StateWithTree;
 
-export type EmptyExecutorState = StateWithLanguage & StateWithEditor;
+export type EmptyExecutorState = StateWithLanguage &
+    StateWithEditor & {
+        compilationPanelShown: boolean;
+        compilerOutShown: boolean;
+    };
 export type PopulatedExecutorState = StateWithLanguage &
     StateWithEditor &
     StateWithTree & {
         compiler: string;
         libs: unknown;
         options: unknown;
+        compilationPanelShown: boolean;
+        compilerOutShown: boolean;
+        overrides?: ConfiguredOverrides;
+        runtimeTools?: ConfiguredRuntimeTools;
     };
-export type ExecutorForTreeState = StateWithLanguage & StateWithTree;
+export type ExecutorForTreeState = StateWithLanguage &
+    StateWithTree & {
+        compilationPanelShown: boolean;
+        compilerOutShown: boolean;
+    };
 
 export type EmptyEditorState = Partial<StateWithId & StateWithLanguage>;
-export type PopulatedEditorState = StateWithId & {
-    source: string;
-    options: unknown;
-};
+export type PopulatedEditorState = StateWithId &
+    StateWithLanguage & {
+        source: string;
+        options: unknown;
+    };
 
-export type EmptyTreeState = Partial<StateWithId>;
+type CmakeArgsState = {cmakeArgs: string};
+export type EmptyTreeState = Partial<StateWithId & CmakeArgsState>;
 
 export type OutputState = StateWithTree & {
-    compiler: string;
+    compiler: number; // CompilerID
     editor: number; // EditorId
 };
 
-export type ToolViewState = StateWithTree & {
-    compiler: string;
-    editor: number; // EditorId
+export type ToolState = {
     toolId: string;
-    args: unknown;
-    monacoStdin: boolean;
+    monacoStdin?: boolean;
+    monacoEditorOpen?: boolean;
+    monacoEditorHasBeenAutoOpened?: boolean;
+    argsPanelShown?: boolean;
+    stdinPanelShown?: boolean;
+    args?: string;
+    stdin?: string;
+    wrap?: boolean;
 };
+
+export type NewToolSettings = MonacoPaneState & ToolState;
+
+export type ToolViewState = StateWithTree &
+    ToolState & {
+        id: number; // CompilerID (TODO(#4703): Why is this not part of StateWithTree)
+        compilerName: string; // Compiler Name (TODO(#4703): Why is this not part of StateWithTree)
+        editorid: number; // EditorId
+        toolId: string;
+    };
 
 export type EmptyToolInputViewState = EmptyState;
 export type PopulatedToolInputViewState = {
-    compilerId: string;
+    compilerId: number;
     toolId: string;
     toolName: string;
 };
@@ -124,6 +162,15 @@ export type EmptyOptViewState = EmptyState;
 export type PopulatedOptViewState = StateWithId &
     StateWithEditor & {
         optOutput: unknown;
+        compilerName: string;
+        editorid: number;
+        treeid: number;
+    };
+
+export type EmptyStackUsageViewState = EmptyState;
+export type PopulatedStackUsageViewState = StateWithId &
+    StateWithEditor & {
+        suOutput: unknown;
         compilerName: string;
         editorid: number;
         treeid: number;
@@ -177,17 +224,26 @@ export type PopulatedConformanceViewState = {
 };
 
 export type EmptyIrViewState = EmptyState;
-export type PopulatedIrViewState = StateWithId & {
-    editorid: number;
-    treeid: number;
-    source: string;
-    irOutput: unknown;
-    compilerName: string;
-};
+export type PopulatedIrViewState = StateWithId &
+    IrState & {
+        editorid: number;
+        treeid: number;
+        source: string;
+        compilerName: string;
+    };
 
-export type EmptyLLVMOptPipelineViewState = EmptyState;
-export type PopulatedLLVMOptPipelineViewState = StateWithId &
-    LLVMOptPipelineViewState & {
+export type EmptyClangirViewState = EmptyState;
+export type PopulatedClangirViewState = StateWithId &
+    ClangirState & {
+        editorid: number;
+        treeid: number;
+        source: string;
+        compilerName: string;
+    };
+
+export type EmptyOptPipelineViewState = EmptyState;
+export type PopulatedOptPipelineViewState = StateWithId &
+    OptPipelineViewState & {
         compilerName: string;
         editorid: number;
         treeid: number;

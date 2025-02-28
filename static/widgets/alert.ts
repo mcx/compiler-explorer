@@ -24,8 +24,7 @@
 
 import $ from 'jquery';
 
-import {AlertAskOptions, AlertEnterTextOptions, AlertNotifyOptions} from './alert.interfaces';
-import {toggleEventListener} from '../utils';
+import {AlertAskOptions, AlertEnterTextOptions, AlertNotifyOptions} from './alert.interfaces.js';
 
 export class Alert {
     yesHandler: ((answer?: string | string[] | number) => void) | null = null;
@@ -42,11 +41,20 @@ export class Alert {
         });
     }
 
+    private toggleEventListener(element: JQuery, eventName: string, callback: (event: JQuery.Event) => void): void {
+        element.on(eventName, (event: JQuery.Event) => {
+            callback(event);
+            element.off(eventName);
+            this.yesHandler = null;
+            this.noHandler = null;
+        });
+    }
     /**
      * Display an alert with a title and a body
      */
-    alert(title: string, body: string, onClose?: () => void) {
+    alert(title: string, body: string, {onClose, isError}: {onClose?: () => void; isError?: boolean} = {}) {
         const modal = $('#alert');
+        modal.toggleClass('error-alert', isError === true);
         modal.find('.modal-title').html(title);
         modal.find('.modal-body').html(body);
         modal.modal();
@@ -94,7 +102,7 @@ export class Alert {
             autoDismiss = true,
             dismissTime = 5000,
             onBeforeShow = () => {},
-        }: AlertNotifyOptions
+        }: AlertNotifyOptions,
     ) {
         const container = $('#notifications');
         const newElement = $(`
@@ -139,13 +147,13 @@ export class Alert {
         modal.find('.modal-body .question').html(question);
 
         const yesButton = modal.find('.modal-footer .yes');
-        toggleEventListener(yesButton, 'click', () => {
+        this.toggleEventListener(yesButton, 'click', () => {
             const answer = modal.find('.question-answer');
             this.yesHandler?.(answer.val());
         });
 
         const noButton = modal.find('.modal-footer .no');
-        toggleEventListener(noButton, 'click', () => {
+        this.toggleEventListener(noButton, 'click', () => {
             this.noHandler?.();
         });
 

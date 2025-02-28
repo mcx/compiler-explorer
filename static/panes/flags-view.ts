@@ -22,21 +22,22 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import {Container} from 'golden-layout';
 import $ from 'jquery';
 import * as monaco from 'monaco-editor';
-import _, {Cancelable} from 'underscore';
-import {MonacoPane} from './pane';
-import {ga} from '../analytics';
-import * as monacoConfig from '../monaco-config';
-import {FlagsViewState} from './flags-view.interfaces';
-import {Container} from 'golden-layout';
-import {MonacoPaneState} from './pane.interfaces';
-import {Settings, SiteSettings} from '../settings';
-import {Hub} from '../hub';
+import _ from 'underscore';
+import {CompilationResult} from '../compilation/compilation.interfaces.js';
+import {CompilerInfo} from '../compiler.interfaces.js';
+import {Hub} from '../hub.js';
+import * as monacoConfig from '../monaco-config.js';
+import {Settings, SiteSettings} from '../settings.js';
+import {FlagsViewState} from './flags-view.interfaces.js';
+import {MonacoPaneState} from './pane.interfaces.js';
+import {MonacoPane} from './pane.js';
 
 export class Flags extends MonacoPane<monaco.editor.IStandaloneCodeEditor, FlagsViewState> {
-    debouncedEmitChange: ((e: boolean) => void) & Cancelable = (() => {}) as any;
-    cursorSelectionThrottledFunction: ((e: any) => void) & Cancelable;
+    debouncedEmitChange: (e: boolean) => void = () => {};
+    cursorSelectionThrottledFunction: ((e: any) => void) & _.Cancelable;
     lastChangeEmitted: string;
     constructor(hub: Hub, container: Container, state: FlagsViewState & MonacoPaneState) {
         super(hub, container, state);
@@ -56,22 +57,22 @@ export class Flags extends MonacoPane<monaco.editor.IStandaloneCodeEditor, Flags
     }
 
     override createEditor(editorRoot: HTMLElement) {
-        return monaco.editor.create(
+        this.editor = monaco.editor.create(
             editorRoot,
             monacoConfig.extendConfig({
                 language: 'plaintext',
                 readOnly: false,
                 glyphMargin: true,
-            })
+            }),
         );
     }
 
-    override registerOpeningAnalyticsEvent() {
-        ga.proxy('send', {
-            hitType: 'event',
-            eventCategory: 'OpenViewPane',
-            eventAction: 'detailedCompilerFlags',
-        });
+    override getPrintName() {
+        return '<Unimplemented>';
+    }
+
+    override sendPrintData() {
+        // nop
     }
 
     override registerCallbacks() {
@@ -99,7 +100,13 @@ export class Flags extends MonacoPane<monaco.editor.IStandaloneCodeEditor, Flags
         return 'Detailed Compiler Flags';
     }
 
-    override onCompiler(compilerId: number, compiler: any, options: unknown, editorId: number, treeId: number) {
+    override onCompiler(
+        compilerId: number,
+        compiler: CompilerInfo | null,
+        options: string,
+        editorId: number,
+        treeId: number,
+    ) {
         if (compilerId === this.compilerInfo.compilerId) {
             this.compilerInfo.compilerName = compiler ? compiler.name : '';
             this.compilerInfo.editorId = editorId;
@@ -108,7 +115,7 @@ export class Flags extends MonacoPane<monaco.editor.IStandaloneCodeEditor, Flags
         }
     }
 
-    override onCompileResult(compilerId: number, compiler: unknown, result: unknown) {}
+    override onCompileResult(compilerId: number, compiler: CompilerInfo, result: CompilationResult) {}
 
     override close() {
         this.eventHub.unsubscribe();
@@ -150,7 +157,7 @@ export class Flags extends MonacoPane<monaco.editor.IStandaloneCodeEditor, Flags
         return state as MonacoPaneState;
     }
 
-    maybeEmitChange(force) {
+    maybeEmitChange(force: boolean) {
         const options = this.getOptions();
         if (!force && options === this.lastChangeEmitted) return;
 

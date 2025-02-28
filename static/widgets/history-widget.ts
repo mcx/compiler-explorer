@@ -23,83 +23,36 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 import $ from 'jquery';
-import {pluck} from 'underscore';
-import {ga} from '../analytics';
-import {sortedList, HistoryEntry, EditorSource} from '../history';
 import {editor} from 'monaco-editor';
-
-import IStandaloneDiffEditor = editor.IStandaloneDiffEditor;
+import {pluck} from 'underscore';
+import {EditorSource, HistoryEntry, sortedList} from '../history.js';
 import ITextModel = editor.ITextModel;
-
-export class HistoryDiffState {
-    public model: ITextModel;
-    private result: EditorSource[];
-
-    constructor(model: ITextModel) {
-        this.model = model;
-        this.result = [];
-    }
-
-    update(result: HistoryEntry) {
-        this.result = result.sources;
-        this.refresh();
-
-        return true;
-    }
-
-    private refresh() {
-        const output = this.result;
-        const content = output.map(val => `/****** ${val.lang} ******/\n${val.source}`).join('\n');
-
-        this.model.setValue(content);
-    }
-}
+import {unwrap} from '../assert.js';
 
 type Entry = {dt: number; name: string; load: () => void};
 
 export class HistoryWidget {
-    private modal: JQuery | null;
-    private diffEditor: IStandaloneDiffEditor | null;
-    private lhs: HistoryDiffState | null;
-    private rhs: HistoryDiffState | null;
-    private currentList: HistoryEntry[];
-    private onLoadCallback: (data: HistoryEntry) => void;
-
-    constructor() {
-        this.modal = null;
-        this.diffEditor = null;
-        this.lhs = null;
-        this.rhs = null;
-        this.currentList = [];
-        this.onLoadCallback = () => {};
-    }
+    private modal: JQuery | null = null;
+    private srcDisplay: editor.ICodeEditor | null = null;
+    private model: ITextModel = editor.createModel('', 'c++');
+    private currentList: HistoryEntry[] = [];
+    private onLoadCallback: (data: HistoryEntry) => void = () => {};
 
     private initializeIfNeeded() {
         if (this.modal === null) {
             this.modal = $('#history');
 
             const placeholder = this.modal.find('.monaco-placeholder');
-            this.diffEditor = editor.createDiffEditor(placeholder[0], {
+            this.srcDisplay = editor.create(placeholder[0], {
                 fontFamily: 'Consolas, "Liberation Mono", Courier, monospace',
                 scrollBeyondLastLine: true,
                 readOnly: true,
-                // language: 'c++',
                 minimap: {
-                    enabled: true,
+                    enabled: false,
                 },
             });
 
-            this.lhs = new HistoryDiffState(editor.createModel('', 'c++'));
-            this.rhs = new HistoryDiffState(editor.createModel('', 'c++'));
-            this.diffEditor.setModel({original: this.lhs.model, modified: this.rhs.model});
-
-            this.modal.find('.inline-diff-checkbox').on('click', event => {
-                const inline = $(event.target).prop('checked');
-                this.diffEditor?.updateOptions({
-                    renderSideBySide: !inline,
-                });
-                this.resizeLayout();
-            });
+            this.srcDisplay.setModel(this.model);
         }
     }
 
@@ -110,8 +63,7 @@ export class HistoryWidget {
     private populateFromLocalStorage() {
         this.currentList = sortedList();
         this.populate(
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-            this.modal!.find('.historiccode'),
+            unwrap(this.modal).find('.historiccode'),
             this.currentList.map((data): Entry => {
                 const dt = new Date(data.dt).toString();
                 const languages = HistoryWidget.getLanguagesFromHistoryEntry(data).join(', ');
@@ -123,63 +75,33 @@ export class HistoryWidget {
                         this.modal?.modal('hide');
                     },
                 };
-            })
+            }),
         );
     }
 
-    private hideRadiosAndSetDiff() {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const root = this.modal!.find('.historiccode');
-        const items = root.find('li:not(.template)');
+    private getContent(src: EditorSource[]) {
+        return src.map(val => `/****** ${val.lang} ******/\n${val.source}`).join('\n');
+    }
 
-        let foundbase = false;
-        let foundcomp = false;
+    private showPreview() {
+        const root = unwrap(this.modal).find('.historiccode');
+        const elements = root.find('li:not(.template)');
 
-        for (const elem of items) {
+        for (const elem of elements) {
             const li = $(elem);
             const dt = li.data('dt');
 
-            const base = li.find('.base');
-            const comp = li.find('.comp');
+            const preview = li.find('.preview');
 
-            let baseShouldBeVisible = true;
-            let compShouldBeVisible = true;
+            if (preview.prop('checked')) {
+                const item = this.currentList.find(item => item.dt === dt);
+                const text: string = this.getContent(item!.sources);
+                this.model.setValue(text);
 
-            if (comp.prop('checked')) {
-                foundcomp = true;
-                baseShouldBeVisible = false;
-
-                const itemRight = this.currentList.find(item => item.dt === dt);
-                if (itemRight) {
-                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    this.rhs!.update(itemRight);
-                }
-            } else if (base.prop('checked')) {
-                foundbase = true;
-
-                const itemLeft = this.currentList.find(item => item.dt === dt);
-                if (itemLeft) {
-                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-                    this.lhs!.update(itemLeft);
-                }
-            }
-
-            if (foundbase && foundcomp) {
-                compShouldBeVisible = false;
-            } else if (!foundbase && !foundcomp) {
-                baseShouldBeVisible = false;
-            }
-
-            if (compShouldBeVisible) {
-                comp.css('visibility', '');
-            } else {
-                comp.css('visibility', 'hidden');
-            }
-
-            if (baseShouldBeVisible) {
-                base.css('visibility', '');
-            } else {
-                base.css('visibility', 'hidden');
+                // Syntax-highlight by the language of the 1st source
+                let firstLang = HistoryWidget.getLanguagesFromHistoryEntry(item!)[0];
+                firstLang = firstLang === 'c++' ? 'cpp' : firstLang;
+                editor.setModelLanguage(this.model, firstLang);
             }
         }
     }
@@ -188,40 +110,23 @@ export class HistoryWidget {
         root.find('li:not(.template)').remove();
         const template = root.find('.template');
 
-        let baseMarked = false;
-        let compMarked = false;
-
         for (const elem of list) {
             const li = template.clone().removeClass('template').appendTo(root);
 
             li.data('dt', elem.dt);
 
-            const base = li.find('.base');
-            const comp = li.find('.comp');
+            const preview = li.find('.preview');
 
-            if (!compMarked) {
-                comp.prop('checked', 'checked');
-                compMarked = true;
-            } else if (!baseMarked) {
-                base.prop('checked', 'checked');
-                baseMarked = true;
-            }
-
-            base.on('click', () => this.hideRadiosAndSetDiff());
-            comp.on('click', () => this.hideRadiosAndSetDiff());
-
+            preview.on('click', () => this.showPreview());
             li.find('a').text(elem.name).on('click', elem.load);
         }
-
-        this.hideRadiosAndSetDiff();
     }
 
     private resizeLayout() {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const tabcontent = this.modal!.find('div.tab-content');
-        this.diffEditor?.layout({
-            width: tabcontent.width() as number,
-            height: (tabcontent.height() as number) - 20,
+        const content = unwrap(this.modal).find('div.src-content');
+        this.srcDisplay?.layout({
+            width: unwrap(content.width()),
+            height: unwrap(content.height()) - 20,
         });
     }
 
@@ -235,15 +140,7 @@ export class HistoryWidget {
         this.onLoadCallback = onLoad;
 
         // It can't tell that we initialize modal on initializeIfNeeded, so it sticks to the possibility of it being null
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        this.modal!.on('shown.bs.modal', () => this.resizeLayout());
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        this.modal!.modal();
-
-        ga.proxy('send', {
-            hitType: 'event',
-            eventCategory: 'OpenModalPane',
-            eventAction: 'History',
-        });
+        unwrap(this.modal).on('shown.bs.modal', () => this.resizeLayout());
+        unwrap(this.modal).modal();
     }
 }

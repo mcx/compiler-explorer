@@ -22,8 +22,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import _ from 'underscore';
 import * as monaco from 'monaco-editor';
+import _ from 'underscore';
 
 type RegisteredQuickFixes = {
     compilerId: number;
@@ -37,7 +37,7 @@ const providersPerLanguage: Record<string, monaco.IDisposable> = {};
 export function registerQuickFixesForCompiler(
     compilerId: number,
     editorModel: monaco.editor.ITextModel,
-    fixes: monaco.languages.CodeAction[]
+    fixes: monaco.languages.CodeAction[],
 ): void {
     const item = _.find(registeredQuickFixes, (item: RegisteredQuickFixes): boolean => {
         return item.compilerId === compilerId;
@@ -57,7 +57,7 @@ export function registerQuickFixesForCompiler(
 function provide(
     model: monaco.editor.ITextModel,
     range: monaco.Range,
-    context: monaco.languages.CodeActionContext
+    context: monaco.languages.CodeActionContext,
 ): monaco.languages.CodeActionList {
     const item = _.find(registeredQuickFixes, (item: RegisteredQuickFixes): boolean => {
         return item.editorModel === model;
@@ -74,7 +74,7 @@ function provide(
                             'startLineNumber',
                             'startColumn',
                             'endLineNumber',
-                            'endColumn'
+                            'endColumn',
                         );
                         const marker = _.pick(
                             m,
@@ -82,20 +82,19 @@ function provide(
                             'startLineNumber',
                             'startColumn',
                             'endLineNumber',
-                            'endColumn'
+                            'endColumn',
                         );
                         return _.isEqual(marker, diagnostic);
-                    })
-                )
+                    }),
+                ),
             ),
-            dispose: function () {},
-        };
-    } else {
-        return {
-            actions: [],
-            dispose: function () {},
+            dispose: () => {},
         };
     }
+    return {
+        actions: [],
+        dispose: () => {},
+    };
 }
 
 export function unregister(compilerId: number): void {

@@ -22,9 +22,9 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {AnnotatedCfgDescriptor, AnnotatedNodeDescriptor} from '../types/compilation/cfg.interfaces';
+import {AnnotatedCfgDescriptor, AnnotatedNodeDescriptor, EdgeColor} from '../types/compilation/cfg.interfaces.js';
 
-import IntervalTree, {Node} from '@flatten-js/interval-tree';
+import IntervalTree from '@flatten-js/interval-tree';
 
 // Much of the algorithm is inspired from
 // https://cutter.re/docs/api/widgets/classGraphGridLayout.html
@@ -37,7 +37,7 @@ function assert(condition: boolean, message?: string, ...args: any[]): asserts c
         throw (
             (message
                 ? `Assertion error in llvm-print-after-all-parser: ${message}`
-                : `Assertion error in llvm-print-after-all-parser`) +
+                : 'Assertion error in llvm-print-after-all-parser') +
             (args.length > 0 ? `\n${JSON.stringify(args)}\n` : '') +
             `\n${stack}`
         );
@@ -45,8 +45,8 @@ function assert(condition: boolean, message?: string, ...args: any[]): asserts c
 }
 
 enum SegmentType {
-    Horizontal,
-    Vertical,
+    Horizontal = 0,
+    Vertical = 1,
 }
 
 type Coordinate = {
@@ -66,11 +66,11 @@ type EdgeSegment = {
     end: EdgeCoordinate;
     horizontalOffset: number;
     verticalOffset: number;
-    type: SegmentType; // is this point the end of a horizontal or vertical segment
+    type: SegmentType;
 };
 
 type Edge = {
-    color: string;
+    color: EdgeColor;
     dest: number;
     mainColumn: number;
     path: EdgeSegment[];
@@ -95,9 +95,9 @@ type Block = {
 };
 
 enum DfsState {
-    NotVisited,
-    Pending,
-    Visited,
+    NotVisited = 0,
+    Pending = 1,
+    Visited = 2,
 }
 
 type ColumnDescriptor = {
@@ -214,7 +214,7 @@ export class GraphLayoutCore {
         return order.reverse();
     }
 
-    assignRows(topologicalOrder) {
+    assignRows(topologicalOrder: number[]) {
         for (const i of topologicalOrder) {
             const block = this.blocks[i];
             //console.log(block);
@@ -225,7 +225,7 @@ export class GraphLayoutCore {
         }
     }
 
-    computeTree(topologicalOrder) {
+    computeTree(topologicalOrder: number[]) {
         // DAG is reduced to a tree based on what's vertically adjacent
         //
         // For something like
@@ -317,7 +317,7 @@ export class GraphLayoutCore {
         }
     }
 
-    assignColumns(topologicalOrder) {
+    assignColumns(topologicalOrder: number[]) {
         // Note: Currently not taking shape into account like Cutter does.
         // Post DFS order means we compute all children before their parents
         for (const i of topologicalOrder.slice().reverse()) {
@@ -403,9 +403,8 @@ export class GraphLayoutCore {
         events.sort((a: Event, b: Event) => {
             if (a.row === b.row) {
                 return a.type - b.type;
-            } else {
-                return a.row - b.row;
             }
+            return a.row - b.row;
         });
         //
         const blockedColumns = Array(this.columnCount + 1).fill(-1);
@@ -450,7 +449,8 @@ export class GraphLayoutCore {
                         ) {
                             edge.mainColumn = sourceColumn + 1;
                             continue;
-                        } else if (
+                        }
+                        if (
                             targetColumn > sourceColumn &&
                             blockedColumns[sourceColumn - 1] < topRow &&
                             targetColumn - sourceColumn <= distanceRight + 2
@@ -488,7 +488,6 @@ export class GraphLayoutCore {
         }
     }
 
-    // eslint-disable-next-line max-statements
     addEdgePaths() {
         // (start: GridCoordinate, end: GridCoordinate) => ({
         const makeSegment = (start: [number, number], end: [number, number]): EdgeSegment => ({
@@ -575,13 +574,12 @@ export class GraphLayoutCore {
                                     prevSegment.start.row !== segment.start.row)
                             ) {
                                 throw Error(
-                                    "Adjacent horizontal or vertical segments don't share a common row or column"
+                                    "Adjacent horizontal or vertical segments don't share a common row or column",
                                 );
                             }
                             prevSegment.end = segment.end;
                             edge.path.splice(i, 1);
                             movement = true;
-                            continue;
                         }
                     }
                 } while (movement);
@@ -607,62 +605,9 @@ export class GraphLayoutCore {
                         }
                     }
                 }
-                // Compute subrows/subcolumns
-                for (const segment of edge.path) {
-                    if (segment.type === SegmentType.Vertical) {
-                        if (segment.start.col !== segment.end.col) {
-                            throw Error('Vertical segment changes column');
-                        }
-                        const col = this.edgeColumns[segment.start.col];
-                        let inserted = false;
-                        for (const tree of col.intervals) {
-                            if (!tree.intersect_any([segment.start.row, segment.end.row])) {
-                                tree.insert([segment.start.row, segment.end.row], segment);
-                                inserted = true;
-                                break;
-                            }
-                        }
-                        if (!inserted) {
-                            const tree = new IntervalTree<EdgeSegment>();
-                            col.intervals.push(tree);
-                            col.subcolumns++;
-                            tree.insert([segment.start.row, segment.end.row], segment);
-                        }
-                    } else {
-                        // horizontal
-                        if (segment.start.row !== segment.end.row) {
-                            throw Error('Horizontal segment changes row');
-                        }
-                        const row = this.edgeRows[segment.start.row];
-                        let inserted = false;
-                        for (const tree of row.intervals) {
-                            if (!tree.intersect_any([segment.start.col, segment.end.col])) {
-                                tree.insert([segment.start.col, segment.end.col], segment);
-                                inserted = true;
-                                break;
-                            }
-                        }
-                        if (!inserted) {
-                            const tree = new IntervalTree<EdgeSegment>();
-                            row.intervals.push(tree);
-                            row.subrows++;
-                            tree.insert([segment.start.col, segment.end.col], segment);
-                        }
-                    }
-                }
             }
         }
-        // Throw everything away and do it all again, but smarter
-        for (const edgeColumn of this.edgeColumns) {
-            for (const intervalTree of edgeColumn.intervals) {
-                intervalTree.root = null as unknown as Node<EdgeSegment>;
-            }
-        }
-        for (const edgeRow of this.edgeRows) {
-            for (const intervalTree of edgeRow.intervals) {
-                intervalTree.root = null as unknown as Node<EdgeSegment>;
-            }
-        }
+
         // Edge kind is the primary heuristic for subrow/column assignment
         // For horizontal edges, think of left/vertical/right terminology rotated 90 degrees right
         enum EdgeKind {
@@ -671,7 +616,8 @@ export class GraphLayoutCore {
             VERTICAL = 0,
             RIGHTCORNER = 1,
             RIGHTU = 2,
-            NULL = NaN,
+            // biome-ignore lint/style/useLiteralEnumMembers: ported from cutter
+            NULL = Number.NaN,
         }
         const segments: {
             segment: EdgeSegment;
@@ -688,10 +634,11 @@ export class GraphLayoutCore {
                 for (const [i, segment] of edge.path.entries()) {
                     let kind = EdgeKind.NULL;
                     if (i === 0) {
-                        // segment will be vertical
                         if (edge.path.length === 1) {
+                            // Segment will be vertical
                             kind = EdgeKind.VERTICAL;
                         } else {
+                            // There will be a next
                             const next = edge.path[i + 1];
                             if (next.end.col > segment.end.col) {
                                 kind = EdgeKind.RIGHTCORNER;
@@ -700,8 +647,7 @@ export class GraphLayoutCore {
                             }
                         }
                     } else if (i === edge.path.length - 1) {
-                        // segment will be vertical
-                        // there will be a previous segment, i !== 0
+                        // There will be a previous segment, i !== 0, but no next
                         const previous = edge.path[i - 1];
                         if (previous.start.col > segment.end.col) {
                             kind = EdgeKind.RIGHTCORNER;
@@ -709,7 +655,7 @@ export class GraphLayoutCore {
                             kind = EdgeKind.LEFTCORNER;
                         }
                     } else {
-                        // there will be both a previous and a next
+                        // There will be both a previous and a next
                         const next = edge.path[i + 1];
                         const previous = edge.path[i - 1];
                         if (segment.type === SegmentType.Vertical) {
@@ -720,10 +666,11 @@ export class GraphLayoutCore {
                             } else if (previous.start.col > segment.end.col) {
                                 kind = EdgeKind.RIGHTCORNER;
                             } else {
+                                assert(previous.start.col < segment.end.col);
                                 kind = EdgeKind.LEFTCORNER;
                             }
                         } else {
-                            // horizontal
+                            assert(segment.type === SegmentType.Horizontal);
                             // Same logic, think rotated 90 degrees right
                             if (previous.start.row <= segment.start.row && next.end.row < segment.start.row) {
                                 kind = EdgeKind.LEFTU;
@@ -751,28 +698,23 @@ export class GraphLayoutCore {
         segments.sort((a, b) => {
             if (a.kind !== b.kind) {
                 return a.kind - b.kind;
-            } else {
-                const kind = a.kind; // a.kind == b.kind
-                if (a.length !== b.length) {
-                    if (kind <= 0) {
-                        // shortest first if coming from the left
-                        return a.length - b.length;
-                    } else {
-                        // coming from the right, shortest last
-                        // reverse edge length order
-                        return b.length - a.length;
-                    }
-                } else {
-                    if (kind <= 0) {
-                        return a.tiebreaker - b.tiebreaker;
-                    } else {
-                        // coming from the right, reverse
-                        return b.tiebreaker - a.tiebreaker;
-                    }
-                }
             }
+            const kind = a.kind; // a.kind == b.kind
+            if (a.length !== b.length) {
+                if (kind <= 0) {
+                    // shortest first if coming from the left
+                    return a.length - b.length;
+                }
+                // coming from the right, shortest last
+                // reverse edge length order
+                return b.length - a.length;
+            }
+            if (kind <= 0) {
+                return a.tiebreaker - b.tiebreaker;
+            }
+            // coming from the right, reverse
+            return b.tiebreaker - a.tiebreaker;
         });
-        ///console.log(segments);
         for (const segmentEntry of segments) {
             const {segment} = segmentEntry;
             if (segment.type === SegmentType.Vertical) {
@@ -786,7 +728,10 @@ export class GraphLayoutCore {
                     }
                 }
                 if (!inserted) {
-                    throw Error("Vertical segment couldn't be inserted");
+                    const tree = new IntervalTree<EdgeSegment>();
+                    col.intervals.push(tree);
+                    col.subcolumns++;
+                    tree.insert([segment.start.row, segment.end.row], segment);
                 }
             } else {
                 // Horizontal
@@ -800,7 +745,10 @@ export class GraphLayoutCore {
                     }
                 }
                 if (!inserted) {
-                    throw Error("Horizontal segment couldn't be inserted");
+                    const tree = new IntervalTree<EdgeSegment>();
+                    row.intervals.push(tree);
+                    row.subrows++;
+                    tree.insert([segment.start.col, segment.end.col], segment);
                 }
             }
         }
@@ -823,7 +771,6 @@ export class GraphLayoutCore {
         }
     }
 
-    // eslint-disable-next-line max-statements
     computeCoordinates() {
         // Compute block row widths and heights
         for (const block of this.blocks) {

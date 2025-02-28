@@ -22,18 +22,19 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import $ from 'jquery';
-import {Settings} from '../settings';
 import {Chart, ChartData, defaults} from 'chart.js';
+import $ from 'jquery';
+import {Settings} from '../settings.js';
 import 'chart.js/auto';
-import {CompilationResult} from '../../types/compilation/compilation.interfaces';
-import _ from 'underscore';
+import {isString} from '../../shared/common-utils.js';
+import {CompilationResult} from '../../types/compilation/compilation.interfaces.js';
+import {unwrap} from '../assert.js';
 
 type Data = ChartData<'bar', number[], string> & {steps: number};
 
 function pushTimingInfo(data: Data, step: string, time: number | string) {
     if (typeof time === 'string') {
-        time = parseInt(time, 10);
+        time = Number.parseInt(time, 10);
     }
     data.labels?.push(`${step} (${Math.round(time * 100) / 100}ms)`);
     data.datasets[0].data.push(time);
@@ -80,17 +81,19 @@ function initializeChartDataFromResult(compileResult: CompilationResult, totalTi
     };
 
     if (compileResult.retreivedFromCache) {
-        pushTimingInfo(data, 'Retrieve result from cache', compileResult.retreivedFromCacheTime as number);
-
-        if (compileResult.packageDownloadAndUnzipTime) {
-            pushTimingInfo(data, 'Download binary from cache', compileResult.execTime as string | number);
+        if (compileResult.retreivedFromCacheTime) {
+            pushTimingInfo(data, 'Retrieve result from cache', unwrap(compileResult.retreivedFromCacheTime));
         }
 
-        if (compileResult.execResult && compileResult.execResult.execTime) {
+        if (compileResult.packageDownloadAndUnzipTime) {
+            pushTimingInfo(data, 'Download binary from cache', unwrap(compileResult.execTime));
+        }
+
+        if (compileResult.execResult?.execTime) {
             pushTimingInfo(data, 'Execution', compileResult.execResult.execTime);
         }
     } else {
-        addBuildResultToTimings(data, compileResult);
+        addBuildResultToTimings(data, compileResult.buildResult || compileResult);
 
         if (!compileResult.packageDownloadAndUnzipTime) {
             if (compileResult.objdumpTime) {
@@ -104,10 +107,10 @@ function initializeChartDataFromResult(compileResult: CompilationResult, totalTi
     }
 
     if (compileResult.didExecute) {
-        if (compileResult.execResult && compileResult.execResult.execTime) {
+        if (compileResult.execResult?.execTime) {
             pushTimingInfo(data, 'Execution', compileResult.execResult.execTime);
         } else {
-            pushTimingInfo(data, 'Execution', compileResult.execTime as string | number);
+            pushTimingInfo(data, 'Execution', unwrap(compileResult.execTime));
         }
     }
 
@@ -115,12 +118,12 @@ function initializeChartDataFromResult(compileResult: CompilationResult, totalTi
         pushTimingInfo(data, 'Process execution result', compileResult.processExecutionResultTime);
     }
 
-    if (compileResult.hasLLVMOptPipelineOutput && !_.isString(compileResult.llvmOptPipelineOutput)) {
-        if (compileResult.llvmOptPipelineOutput?.clangTime !== undefined) {
-            pushTimingInfo(data, 'Llvm opt pipeline clang time', compileResult.llvmOptPipelineOutput.clangTime);
+    if (compileResult.optPipelineOutput && !isString(compileResult.optPipelineOutput)) {
+        if (compileResult.optPipelineOutput.compileTime !== undefined) {
+            pushTimingInfo(data, 'Llvm opt pipeline clang time', compileResult.optPipelineOutput.compileTime);
         }
-        if (compileResult.llvmOptPipelineOutput?.parseTime !== undefined) {
-            pushTimingInfo(data, 'Llvm opt pipeline parse time', compileResult.llvmOptPipelineOutput.parseTime);
+        if (compileResult.optPipelineOutput.parseTime !== undefined) {
+            pushTimingInfo(data, 'Llvm opt pipeline parse time', compileResult.optPipelineOutput.parseTime);
         }
     }
 
@@ -141,6 +144,9 @@ function displayData(data: Data) {
     const chartDiv = modal.find('#chart');
     chartDiv.html('');
 
+    // eslint thinks "This assertion is unnecessary since it does not change the type of the expression"
+    // Typescript disagrees.
+
     const canvas = $('<canvas id="timing-chart" width="400" height="400"></canvas>') as JQuery<HTMLCanvasElement>;
     chartDiv.append(canvas);
 
@@ -155,7 +161,7 @@ function displayData(data: Data) {
         data: data,
         options: {
             scales: {
-                xAxis: {
+                x: {
                     beginAtZero: true,
                     grid: {
                         color: fontColour,
@@ -163,7 +169,7 @@ function displayData(data: Data) {
                     },
                     ticks: {color: fontColour},
                 },
-                yAxis: {
+                y: {
                     beginAtZero: true,
                     grid: {
                         color: fontColour,

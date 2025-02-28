@@ -22,13 +22,12 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-'use strict';
-const monaco = require('monaco-editor');
+import * as monaco from 'monaco-editor';
 
 // This definition is based on the official LLVM vim syntax:
 // http://llvm.org/svn/llvm-project/llvm/trunk/utils/vim/syntax/llvm.vim
 // For VIM regex syntax, see: http://vimdoc.sourceforge.net/htmldoc/pattern.html
-export function definition() {
+export function definition(): monaco.languages.IMonarchLanguage {
     return {
         // llvmType
         types: [
@@ -46,6 +45,7 @@ export function definition() {
             'label',
             'opaque',
             'token',
+            'ptr',
         ],
         // llvmStatement
         statements: [
@@ -158,6 +158,8 @@ export function definition() {
             'alias',
             'align',
             'alignstack',
+            'allocalign',
+            'allocptr',
             'alwaysinline',
             'appending',
             'argmemonly',
@@ -169,6 +171,7 @@ export function definition() {
             'available_externally',
             'blockaddress',
             'builtin',
+            'byref',
             'byval',
             'c',
             'catch',
@@ -181,16 +184,19 @@ export function definition() {
             'common',
             'constant',
             'datalayout',
+            'dead_on_unwind',
             'declare',
             'default',
             'define',
             'deplibs',
             'dereferenceable',
+            'dereferenceable_or_null',
             'distinct',
             'dllexport',
             'dllimport',
             'dso_local',
             'dso_preemptable',
+            'elementtype',
             'except',
             'external',
             'externally_initialized',
@@ -203,6 +209,8 @@ export function definition() {
             'hhvmcc',
             'hhvm_ccc',
             'hidden',
+            'immarg',
+            'inalloca',
             'initialexec',
             'inlinehint',
             'inreg',
@@ -224,6 +232,8 @@ export function definition() {
             'noalias',
             'nobuiltin',
             'nocapture',
+            'nofree',
+            'nofpclass',
             'noimplicitfloat',
             'noinline',
             'nonlazybind',
@@ -231,10 +241,12 @@ export function definition() {
             'norecurse',
             'noredzone',
             'noreturn',
+            'noundef',
             'nounwind',
             'optnone',
             'optsize',
             'personality',
+            'preallocated',
             'private',
             'protected',
             'ptx_device',
@@ -261,7 +273,10 @@ export function definition() {
             'sspreq',
             'sspstrong',
             'strictfp',
+            'swiftasync',
             'swiftcc',
+            'swifterror',
+            'swiftself',
             'tail',
             'target',
             'thread_local',
@@ -276,6 +291,7 @@ export function definition() {
             'weak',
             'weak_odr',
             'within',
+            'writable',
             'writeonly',
             'x86_64_sysvcc',
             'win64cc',
@@ -301,7 +317,8 @@ export function definition() {
                 [/\b(zeroinitializer|undef|null|none)\b/, 'constant'], // llvmConstant
                 [/"([^"\\]|\\.)*$/, 'string.invalid'], // non-terminated string
                 [/"/, 'string', '@string'], // push to string state
-                [/[-a-zA-Z$._][-a-zA-Z$._0-9]*:/, 'tag'], // llvmLabel
+                // slightly modified to support demangled function signatures as labels for llvm ir control flow graphs
+                [/[-a-zA-Z$._][-a-zA-Z$._0-9]*(?:\([^:]+\))?:/, 'tag'], // llvmLabel
                 [/[%@][-a-zA-Z$._][-a-zA-Z$._0-9]*/, 'variable.name'], // llvmIdentifier
 
                 // Named metadata and specialized metadata keywords.
@@ -347,7 +364,31 @@ export function definition() {
     };
 }
 
+const config: monaco.languages.LanguageConfiguration = {
+    comments: {
+        lineComment: ';',
+    },
+    brackets: [
+        ['{', '}'],
+        ['[', ']'],
+        ['(', ')'],
+    ],
+    autoClosingPairs: [
+        {open: '[', close: ']'},
+        {open: '{', close: '}'},
+        {open: '(', close: ')'},
+        {open: "'", close: "'", notIn: ['string', 'comment']},
+        {open: '"', close: '"', notIn: ['string']},
+    ],
+    surroundingPairs: [
+        {open: '{', close: '}'},
+        {open: '[', close: ']'},
+        {open: '(', close: ')'},
+        {open: '"', close: '"'},
+        {open: "'", close: "'"},
+    ],
+};
+
 monaco.languages.register({id: 'llvm-ir'});
 monaco.languages.setMonarchTokensProvider('llvm-ir', definition());
-
-export {};
+monaco.languages.setLanguageConfiguration('llvm-ir', config);

@@ -22,16 +22,19 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import {Container} from 'golden-layout';
 import $ from 'jquery';
 import * as monaco from 'monaco-editor';
 import _ from 'underscore';
-import {MonacoPane} from './pane';
-import {ga} from '../analytics';
-import * as monacoConfig from '../monaco-config';
-import {Container} from 'golden-layout';
-import {MonacoPaneState} from './pane.interfaces';
-import {Hub} from '../hub';
-import {ToolInputViewState} from './tool-input-view.interfaces';
+import {CompilationResult} from '../compilation/compilation.interfaces.js';
+import {CompilerInfo} from '../compiler.interfaces.js';
+import {ToolState} from '../components.interfaces.js';
+import {Hub} from '../hub.js';
+import * as monacoConfig from '../monaco-config.js';
+import {SiteSettings} from '../settings.js';
+import {MonacoPaneState} from './pane.interfaces.js';
+import {MonacoPane} from './pane.js';
+import {ToolInputViewState} from './tool-input-view.interfaces.js';
 
 export class ToolInputView extends MonacoPane<monaco.editor.IStandaloneCodeEditor, ToolInputViewState> {
     _toolId: string;
@@ -58,23 +61,19 @@ export class ToolInputView extends MonacoPane<monaco.editor.IStandaloneCodeEdito
     }
 
     override createEditor(editorRoot: HTMLElement) {
-        return monaco.editor.create(
+        this.editor = monaco.editor.create(
             editorRoot,
             monacoConfig.extendConfig({
                 value: '',
                 language: 'plaintext',
                 readOnly: false,
                 glyphMargin: true,
-            })
+            }),
         );
     }
 
-    override registerOpeningAnalyticsEvent() {
-        ga.proxy('send', {
-            hitType: 'event',
-            eventCategory: 'OpenViewPane',
-            eventAction: 'toolInputView',
-        });
+    override getPrintName() {
+        return 'Tool Input';
     }
 
     override registerCallbacks() {
@@ -118,9 +117,15 @@ export class ToolInputView extends MonacoPane<monaco.editor.IStandaloneCodeEdito
         };
     }
 
-    override onCompiler(compilerId: number, compiler: unknown, options: unknown, editorId: number, treeId: number) {}
+    override onCompiler(
+        compilerId: number,
+        compiler: CompilerInfo | null,
+        options: string,
+        editorId: number,
+        treeId: number,
+    ) {}
 
-    override onCompileResult(compilerId: number, compiler: unknown, result: unknown) {}
+    override onCompileResult(compilerId: number, compiler: CompilerInfo, result: CompilationResult) {}
 
     override close() {
         this.eventHub.unsubscribe();
@@ -128,45 +133,45 @@ export class ToolInputView extends MonacoPane<monaco.editor.IStandaloneCodeEdito
         this.editor.dispose();
     }
 
-    onToolClose(compilerId, toolSettings) {
+    onToolClose(compilerId: number, toolSettings: ToolState) {
         if (this.compilerInfo.compilerId === compilerId && this._toolId === toolSettings.toolId) {
             // We can't immediately close as an outer loop somewhere in GoldenLayout is iterating over
             // the hierarchy. We can't modify while it's being iterated over.
             this.close();
-            _.defer(function (self) {
+            _.defer((self: ToolInputView) => {
                 self.container.close();
             }, this);
         }
     }
 
-    onToolInputViewCloseRequest(compilerId, toolId) {
+    onToolInputViewCloseRequest(compilerId: number, toolId: string) {
         if (this.compilerInfo.compilerId === compilerId && this._toolId === toolId) {
             this.close();
-            _.defer(function (self) {
+            _.defer((self: ToolInputView) => {
                 self.container.close();
             }, this);
         }
     }
 
-    override onCompilerClose(id) {
+    override onCompilerClose(id: number) {
         if (id === this.compilerInfo.compilerId) {
             // We can't immediately close as an outer loop somewhere in GoldenLayout is iterating over
             // the hierarchy. We can't modify while it's being iterated over.
             this.close();
-            _.defer(function (self) {
+            _.defer((self: ToolInputView) => {
                 self.container.close();
             }, this);
         }
     }
 
-    override onSettingsChange(newSettings) {
+    override onSettingsChange(newSettings: SiteSettings) {
         super.onSettingsChange(newSettings);
         this.debouncedEmitChange = _.debounce(() => {
             this.maybeEmitChange(false);
         }, newSettings.delayAfterChange);
     }
 
-    override onDidChangeCursorSelection(e) {
+    override onDidChangeCursorSelection(e: monaco.editor.ICursorSelectionChangedEvent) {
         // On initialization this callback fires with the default selection
         // overwriting any selection from state. If we are awaiting initial
         // selection setting then don't update our selection.
@@ -176,7 +181,7 @@ export class ToolInputView extends MonacoPane<monaco.editor.IStandaloneCodeEdito
         }
     }
 
-    onSetToolInput(compilerId, toolId, value) {
+    onSetToolInput(compilerId: number, toolId: string, value: string) {
         if (this.compilerInfo.compilerId === compilerId && this._toolId === toolId) {
             const ret = this.editor.getModel()?.setValue(value);
             if (this.shouldSetSelectionInitially && this.selection) {
@@ -195,7 +200,7 @@ export class ToolInputView extends MonacoPane<monaco.editor.IStandaloneCodeEdito
         return this.editor.getModel()?.getValue() ?? '';
     }
 
-    maybeEmitChange(force) {
+    maybeEmitChange(force: boolean) {
         const input = this.getInput();
         if (!force && input === this.lastChangeEmitted) return;
 

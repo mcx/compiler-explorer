@@ -23,11 +23,14 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 import GoldenLayout, {ContentItem} from 'golden-layout';
+type GLC = GoldenLayout.Container;
 
-import {CompilerService} from './compiler-service';
+import _ from 'underscore';
+import {CompilerService} from './compiler-service.js';
 import {
     AST_VIEW_COMPONENT_NAME,
     CFG_VIEW_COMPONENT_NAME,
+    CLANGIR_VIEW_COMPONENT_NAME,
     COMPILER_COMPONENT_NAME,
     CONFORMANCE_VIEW_COMPONENT_NAME,
     DEVICE_VIEW_COMPONENT_NAME,
@@ -43,44 +46,55 @@ import {
     HASKELL_STG_VIEW_COMPONENT_NAME,
     IR_VIEW_COMPONENT_NAME,
     LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME,
+    OPT_PIPELINE_VIEW_COMPONENT_NAME,
     OPT_VIEW_COMPONENT_NAME,
     OUTPUT_COMPONENT_NAME,
     PP_VIEW_COMPONENT_NAME,
     RUST_HIR_VIEW_COMPONENT_NAME,
     RUST_MACRO_EXP_VIEW_COMPONENT_NAME,
     RUST_MIR_VIEW_COMPONENT_NAME,
+    STACK_USAGE_VIEW_COMPONENT_NAME,
     TOOL_COMPONENT_NAME,
     TOOL_INPUT_VIEW_COMPONENT_NAME,
     TREE_COMPONENT_NAME,
-} from './components.interfaces';
-import {EventHub} from './event-hub';
-import {Editor} from './panes/editor';
-import {Tree} from './panes/tree';
-import {Compiler} from './panes/compiler';
-import {Executor} from './panes/executor';
-import {Output} from './panes/output';
-import {Tool} from './panes/tool';
-import {Diff} from './panes/diff';
-import {ToolInputView} from './panes/tool-input-view';
-import {Opt as OptView} from './panes/opt-view';
-import {Flags as FlagsView} from './panes/flags-view';
-import {PP as PreProcessorView} from './panes/pp-view';
-import {Ast as AstView} from './panes/ast-view';
-import {Ir as IrView} from './panes/ir-view';
-import {LLVMOptPipeline} from './panes/llvm-opt-pipeline';
-import {DeviceAsm as DeviceView} from './panes/device-view';
-import {GnatDebug as GnatDebugView} from './panes/gnatdebug-view';
-import {RustMir as RustMirView} from './panes/rustmir-view';
-import {RustHir as RustHirView} from './panes/rusthir-view';
-import {HaskellCore as HaskellCoreView} from './panes/haskellcore-view';
-import {HaskellStg as HaskellStgView} from './panes/haskellstg-view';
-import {HaskellCmm as HaskellCmmView} from './panes/haskellcmm-view';
-import {GccDump as GCCDumpView} from './panes/gccdump-view';
-import {Cfg as CfgView} from './panes/cfg-view';
-import {Conformance as ConformanceView} from './panes/conformance-view';
-import {GnatDebugTree as GnatDebugTreeView} from './panes/gnatdebugtree-view';
-import {RustMacroExp as RustMacroExpView} from './panes/rustmacroexp-view';
-import {IdentifierSet} from './identifier-set';
+} from './components.interfaces.js';
+import {EventHub} from './event-hub.js';
+import {EventMap} from './event-map.js';
+import {IdentifierSet} from './identifier-set.js';
+import {LanguageKey} from './languages.interfaces.js';
+import {Ast as AstView} from './panes/ast-view.js';
+import {Cfg as CfgView} from './panes/cfg-view.js';
+import {Clangir as ClangirView} from './panes/clangir-view.js';
+import {Compiler} from './panes/compiler.js';
+import {Conformance as ConformanceView} from './panes/conformance-view.js';
+import {DeviceAsm as DeviceView} from './panes/device-view.js';
+import {Diff} from './panes/diff.js';
+import {Editor} from './panes/editor.js';
+import {Executor} from './panes/executor.js';
+import {Flags as FlagsView} from './panes/flags-view.js';
+import {GccDump as GCCDumpView} from './panes/gccdump-view.js';
+import {GnatDebug as GnatDebugView} from './panes/gnatdebug-view.js';
+import {GnatDebugTree as GnatDebugTreeView} from './panes/gnatdebugtree-view.js';
+import {HaskellCmm as HaskellCmmView} from './panes/haskellcmm-view.js';
+import {HaskellCore as HaskellCoreView} from './panes/haskellcore-view.js';
+import {HaskellStg as HaskellStgView} from './panes/haskellstg-view.js';
+import {Ir as IrView} from './panes/ir-view.js';
+import {OptPipeline} from './panes/opt-pipeline.js';
+import {Opt as OptView} from './panes/opt-view.js';
+import {Output} from './panes/output.js';
+import {PP as PreProcessorView} from './panes/pp-view.js';
+import {RustHir as RustHirView} from './panes/rusthir-view.js';
+import {RustMacroExp as RustMacroExpView} from './panes/rustmacroexp-view.js';
+import {RustMir as RustMirView} from './panes/rustmir-view.js';
+import {StackUsage as StackUsageView} from './panes/stack-usage-view.js';
+import {ToolInputView} from './panes/tool-input-view.js';
+import {Tool} from './panes/tool.js';
+import {Tree} from './panes/tree.js';
+
+type EventDescriptorMap = {
+    [E in keyof EventMap]: [E, ...Parameters<EventMap[E]>];
+};
+export type EventDescriptor = EventDescriptorMap[keyof EventDescriptorMap];
 
 export class Hub {
     public readonly editorIds: IdentifierSet = new IdentifierSet();
@@ -91,115 +105,136 @@ export class Hub {
     public trees: Tree[] = [];
     public editors: any[] = []; // typeof Editor
 
-    public readonly compilerService: any; // typeof CompilerService
+    public readonly compilerService: CompilerService;
 
     public deferred = true;
-    public deferredEmissions: unknown[][] = [];
+    public deferredEmissions: EventDescriptor[] = [];
 
-    public lastOpenedLangId: string | null;
+    public lastOpenedLangId: LanguageKey | null;
     public subdomainLangId: string | undefined;
-    public defaultLangId: string;
+    public defaultLangId: LanguageKey;
 
-    public constructor(public readonly layout: GoldenLayout, subLangId: string, defaultLangId: string) {
+    public constructor(
+        public readonly layout: GoldenLayout,
+        subLangId: string | undefined,
+        defaultLangId: LanguageKey,
+    ) {
         this.lastOpenedLangId = null;
-        this.subdomainLangId = subLangId || undefined;
+        this.subdomainLangId = subLangId;
         this.defaultLangId = defaultLangId;
         this.compilerService = new CompilerService(this.layout.eventHub);
 
-        layout.registerComponent(EDITOR_COMPONENT_NAME, (c, s) => this.codeEditorFactory(c, s));
-        layout.registerComponent(COMPILER_COMPONENT_NAME, (c, s) => this.compilerFactory(c, s));
-        layout.registerComponent(TREE_COMPONENT_NAME, (c, s) => this.treeFactory(c, s));
-        layout.registerComponent(EXECUTOR_COMPONENT_NAME, (c, s) => this.executorFactory(c, s));
-        layout.registerComponent(OUTPUT_COMPONENT_NAME, (c, s) => this.outputFactory(c, s));
-        layout.registerComponent(TOOL_COMPONENT_NAME, (c, s) => this.toolFactory(c, s));
-        layout.registerComponent(TOOL_INPUT_VIEW_COMPONENT_NAME, (c, s) => this.toolInputViewFactory(c, s));
-        layout.registerComponent(DIFF_VIEW_COMPONENT_NAME, (c, s) => this.diffFactory(c, s));
-        layout.registerComponent(OPT_VIEW_COMPONENT_NAME, (c, s) => this.optViewFactory(c, s));
-        layout.registerComponent(FLAGS_VIEW_COMPONENT_NAME, (c, s) => this.flagsViewFactory(c, s));
-        layout.registerComponent(PP_VIEW_COMPONENT_NAME, (c, s) => this.ppViewFactory(c, s));
-        layout.registerComponent(AST_VIEW_COMPONENT_NAME, (c, s) => this.astViewFactory(c, s));
-        layout.registerComponent(IR_VIEW_COMPONENT_NAME, (c, s) => this.irViewFactory(c, s));
-        layout.registerComponent(LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME, (c, s) => this.llvmOptPipelineFactory(c, s));
-        layout.registerComponent(DEVICE_VIEW_COMPONENT_NAME, (c, s) => this.deviceViewFactory(c, s));
-        layout.registerComponent(RUST_MIR_VIEW_COMPONENT_NAME, (c, s) => this.rustMirViewFactory(c, s));
-        layout.registerComponent(HASKELL_CORE_VIEW_COMPONENT_NAME, (c, s) => this.haskellCoreViewFactory(c, s));
-        layout.registerComponent(HASKELL_STG_VIEW_COMPONENT_NAME, (c, s) => this.haskellStgViewFactory(c, s));
-        layout.registerComponent(HASKELL_CMM_VIEW_COMPONENT_NAME, (c, s) => this.haskellCmmViewFactory(c, s));
-        layout.registerComponent(GNAT_DEBUG_TREE_VIEW_COMPONENT_NAME, (c, s) => this.gnatDebugTreeViewFactory(c, s));
-        layout.registerComponent(GNAT_DEBUG_VIEW_COMPONENT_NAME, (c, s) => this.gnatDebugViewFactory(c, s));
-        layout.registerComponent(RUST_MACRO_EXP_VIEW_COMPONENT_NAME, (c, s) => this.rustMacroExpViewFactory(c, s));
-        layout.registerComponent(RUST_HIR_VIEW_COMPONENT_NAME, (c, s) => this.rustHirViewFactory(c, s));
-        layout.registerComponent(GCC_DUMP_VIEW_COMPONENT_NAME, (c, s) => this.gccDumpViewFactory(c, s));
-        layout.registerComponent(CFG_VIEW_COMPONENT_NAME, (c, s) => this.cfgViewFactory(c, s));
-        layout.registerComponent(CONFORMANCE_VIEW_COMPONENT_NAME, (c, s) => this.conformanceViewFactory(c, s));
+        layout.registerComponent(EDITOR_COMPONENT_NAME, (c: GLC, s: any) => this.codeEditorFactory(c, s));
+        layout.registerComponent(COMPILER_COMPONENT_NAME, (c: GLC, s: any) => this.compilerFactory(c, s));
+        layout.registerComponent(TREE_COMPONENT_NAME, (c: GLC, s: any) => this.treeFactory(c, s));
+        layout.registerComponent(EXECUTOR_COMPONENT_NAME, (c: GLC, s: any) => this.executorFactory(c, s));
+        layout.registerComponent(OUTPUT_COMPONENT_NAME, (c: GLC, s: any) => this.outputFactory(c, s));
+        layout.registerComponent(TOOL_COMPONENT_NAME, (c: GLC, s: any) => this.toolFactory(c, s));
+        layout.registerComponent(TOOL_INPUT_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.toolInputViewFactory(c, s));
+        layout.registerComponent(DIFF_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.diffFactory(c, s));
+        layout.registerComponent(OPT_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.optViewFactory(c, s));
+        layout.registerComponent(STACK_USAGE_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.stackUsageViewFactory(c, s));
+        layout.registerComponent(FLAGS_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.flagsViewFactory(c, s));
+        layout.registerComponent(PP_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.ppViewFactory(c, s));
+        layout.registerComponent(AST_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.astViewFactory(c, s));
+        layout.registerComponent(IR_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.irViewFactory(c, s));
+        layout.registerComponent(CLANGIR_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.clangirViewFactory(c, s));
+        layout.registerComponent(OPT_PIPELINE_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.optPipelineFactory(c, s));
+        // Historical LLVM-specific name preserved to keep old links working
+        layout.registerComponent(LLVM_OPT_PIPELINE_VIEW_COMPONENT_NAME, (c: GLC, s: any) =>
+            this.optPipelineFactory(c, s),
+        );
+        layout.registerComponent(DEVICE_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.deviceViewFactory(c, s));
+        layout.registerComponent(RUST_MIR_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.rustMirViewFactory(c, s));
+        layout.registerComponent(HASKELL_CORE_VIEW_COMPONENT_NAME, (c: GLC, s: any) =>
+            this.haskellCoreViewFactory(c, s),
+        );
+        layout.registerComponent(HASKELL_STG_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.haskellStgViewFactory(c, s));
+        layout.registerComponent(HASKELL_CMM_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.haskellCmmViewFactory(c, s));
+        layout.registerComponent(GNAT_DEBUG_TREE_VIEW_COMPONENT_NAME, (c: GLC, s: any) =>
+            this.gnatDebugTreeViewFactory(c, s),
+        );
+        layout.registerComponent(GNAT_DEBUG_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.gnatDebugViewFactory(c, s));
+        layout.registerComponent(RUST_MACRO_EXP_VIEW_COMPONENT_NAME, (c: GLC, s: any) =>
+            this.rustMacroExpViewFactory(c, s),
+        );
+        layout.registerComponent(RUST_HIR_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.rustHirViewFactory(c, s));
+        layout.registerComponent(GCC_DUMP_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.gccDumpViewFactory(c, s));
+        layout.registerComponent(CFG_VIEW_COMPONENT_NAME, (c: GLC, s: any) => this.cfgViewFactory(c, s));
+        layout.registerComponent(CONFORMANCE_VIEW_COMPONENT_NAME, (c: GLC, s: any) =>
+            this.conformanceViewFactory(c, s),
+        );
 
         layout.eventHub.on(
             'editorOpen',
             function (this: Hub, id: number) {
                 this.editorIds.add(id);
             },
-            this
+            this,
         );
         layout.eventHub.on(
             'editorClose',
             function (this: Hub, id: number) {
                 this.editorIds.remove(id);
             },
-            this
+            this,
         );
         layout.eventHub.on(
             'compilerOpen',
             function (this: Hub, id: number) {
                 this.compilerIds.add(id);
             },
-            this
+            this,
         );
         layout.eventHub.on(
             'compilerClose',
             function (this: Hub, id: number) {
                 this.compilerIds.remove(id);
             },
-            this
+            this,
         );
         layout.eventHub.on(
             'treeOpen',
             function (this: Hub, id: number) {
                 this.treeIds.add(id);
             },
-            this
+            this,
         );
         layout.eventHub.on(
             'treeClose',
             function (this: Hub, id: number) {
                 this.treeIds.remove(id);
             },
-            this
+            this,
         );
         layout.eventHub.on(
             'executorOpen',
             function (this: Hub, id: number) {
                 this.executorIds.add(id);
             },
-            this
+            this,
         );
         layout.eventHub.on(
             'executorClose',
             function (this: Hub, id: number) {
                 this.executorIds.remove(id);
             },
-            this
+            this,
         );
         layout.eventHub.on(
             'languageChange',
-            function (this: Hub, editorId: number, langId: string) {
+            function (this: Hub, editorId: number, langId: LanguageKey) {
                 this.lastOpenedLangId = langId;
             },
-            this
+            this,
         );
+    }
 
-        layout.init();
+    public initLayout() {
+        // To be called after setupSettings, as layout.init depends on them
+        this.layout.init();
         this.undefer();
-        layout.eventHub.emit('initialised');
+        this.layout.eventHub.emit('initialised');
     }
 
     public nextTreeId(): number {
@@ -225,26 +260,26 @@ export class Hub {
     public undefer(): void {
         this.deferred = false;
         const eventHub = this.layout.eventHub;
-        const compilerEmissions: unknown[][] = [];
-        const nonCompilerEmissions: unknown[][] = [];
+        const compilerEmissions: EventDescriptor[] = [];
+        const nonCompilerEmissions: EventDescriptor[] = [];
 
-        for (const [eventName, ...args] of this.deferredEmissions) {
-            if (eventName === 'compiler') {
-                compilerEmissions.push([eventName, ...args]);
+        for (const emission of this.deferredEmissions) {
+            if (emission[0] === 'compiler') {
+                compilerEmissions.push(emission);
             } else {
-                nonCompilerEmissions.push([eventName, ...args]);
+                nonCompilerEmissions.push(emission);
             }
         }
 
         for (const args of nonCompilerEmissions) {
-            // @ts-expect-error
-            // eslint-disable-next-line prefer-spread
+            // ts doesn't allow spreading a union of tuples
+
             eventHub.emit.apply(eventHub, args);
         }
 
         for (const args of compilerEmissions) {
-            // @ts-expect-error
-            // eslint-disable-next-line prefer-spread
+            // ts doesn't allow spreading a union of tuples
+
             eventHub.emit.apply(eventHub, args);
         }
 
@@ -308,16 +343,16 @@ export class Hub {
         let index = 0;
         while (index < count) {
             const child = elem.contentItems[index];
+
             // @ts-expect-error -- GoldenLayout's types are messed up here. This
             // is a ContentItem, which can be a Component which has a componentName
             // property
             if (child.componentName === 'codeEditor') {
                 return this.findParentRowOrColumnOrStack(child);
-            } else {
-                if (child.isRow || child.isColumn || child.isStack) {
-                    const editor = this.findEditorInChildren(child);
-                    if (editor) return editor;
-                }
+            }
+            if (child.isRow || child.isColumn || child.isStack) {
+                const editor = this.findEditorInChildren(child);
+                if (editor) return editor;
             }
             index++;
         }
@@ -340,8 +375,8 @@ export class Hub {
     }
 
     public addAtRoot(elem: GoldenLayout.ContentItem): void {
-        const rootFirstItem = this.layout.root.contentItems[0] as GoldenLayout.ContentItem | undefined;
-        if (rootFirstItem) {
+        if (this.layout.root.contentItems.length > 0) {
+            const rootFirstItem = this.layout.root.contentItems[0];
             if (rootFirstItem.isRow || rootFirstItem.isColumn) {
                 rootFirstItem.addChild(elem);
             } else {
@@ -350,7 +385,7 @@ export class Hub {
                     {
                         type: 'row',
                     },
-                    this.layout.root
+                    this.layout.root,
                 );
                 this.layout.root.replaceChild(rootFirstItem, newRow);
                 newRow.addChild(rootFirstItem);
@@ -364,9 +399,31 @@ export class Hub {
         }
     }
 
-    public activateTabForContainer(container?: GoldenLayout.Container) {
+    public activateTabForContainer(container?: GLC) {
         if (container && (container.tab as typeof container.tab | null)) {
             container.tab.header.parent.setActiveContentItem(container.tab.contentItem);
+        }
+    }
+
+    public hasOpenEditorsOrFiles() {
+        return this.editors.length > 1 || this.getTrees().length > 0;
+    }
+
+    public updateCloseButtons(container) {
+        // note: container can be of multiple dynamic types, must query properties instead of assuming they're there
+        if (container.tab !== undefined) {
+            // prohibit closing the editor if it is the only one
+            if (this.hasOpenEditorsOrFiles()) {
+                if (container.tab.header.tabs.length === 1 && container.tab.header.closeButton) {
+                    container.tab.header.closeButton.element.show();
+                }
+                container.tab.header.tabs.forEach(tab => tab.closeElement.show());
+            } else {
+                if (container.tab.header.tabs.length === 1 && container.tab.header.closeButton) {
+                    container.tab.header.closeButton.element.hide();
+                }
+                container.tab.header.tabs.forEach(tab => tab.closeElement.hide());
+            }
         }
     }
 
@@ -377,6 +434,9 @@ export class Hub {
         // NB there doesn't seem to be a better way to do this than reach into the config and rely on the fact nothing
         // has used it yet.
         container.parent.config.isClosable = true;
+        _.defer(() => {
+            this.updateCloseButtons(container);
+        });
         const editor = new Editor(this, state, container);
         this.editors.push(editor);
     }
@@ -409,7 +469,7 @@ export class Hub {
 
     public toolInputViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof ToolInputView>[2]
+        state: ConstructorParameters<typeof ToolInputView>[2],
     ): ToolInputView {
         return new ToolInputView(this, container, state);
     }
@@ -418,16 +478,23 @@ export class Hub {
         return new OptView(this, container, state);
     }
 
+    public stackUsageViewFactory(
+        container: GoldenLayout.Container,
+        state: ConstructorParameters<typeof StackUsageView>[2],
+    ): StackUsageView {
+        return new StackUsageView(this, container, state);
+    }
+
     public flagsViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof FlagsView>[2]
+        state: ConstructorParameters<typeof FlagsView>[2],
     ): FlagsView {
         return new FlagsView(this, container, state);
     }
 
     public ppViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof PreProcessorView>[2]
+        state: ConstructorParameters<typeof PreProcessorView>[2],
     ): PreProcessorView {
         return new PreProcessorView(this, container, state);
     }
@@ -440,71 +507,78 @@ export class Hub {
         return new IrView(this, container, state);
     }
 
-    public llvmOptPipelineFactory(
+    public clangirViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof LLVMOptPipeline>[2]
-    ): LLVMOptPipeline {
-        return new LLVMOptPipeline(this, container, state);
+        state: ConstructorParameters<typeof ClangirView>[2],
+    ): ClangirView {
+        return new ClangirView(this, container, state);
+    }
+
+    public optPipelineFactory(
+        container: GoldenLayout.Container,
+        state: ConstructorParameters<typeof OptPipeline>[2],
+    ): OptPipeline {
+        return new OptPipeline(this, container, state);
     }
 
     public deviceViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof DeviceView>[2]
+        state: ConstructorParameters<typeof DeviceView>[2],
     ): DeviceView {
         return new DeviceView(this, container, state);
     }
 
     public gnatDebugTreeViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof GnatDebugTreeView>[2]
+        state: ConstructorParameters<typeof GnatDebugTreeView>[2],
     ): GnatDebugTreeView {
         return new GnatDebugTreeView(this, container, state);
     }
 
     public gnatDebugViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof GnatDebugView>[2]
+        state: ConstructorParameters<typeof GnatDebugView>[2],
     ): GnatDebugView {
         return new GnatDebugView(this, container, state);
     }
 
     public rustMirViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof RustMirView>[2]
+        state: ConstructorParameters<typeof RustMirView>[2],
     ): RustMirView {
         return new RustMirView(this, container, state);
     }
 
     public rustMacroExpViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof RustMacroExpView>[2]
+        state: ConstructorParameters<typeof RustMacroExpView>[2],
     ): RustMacroExpView {
         return new RustMacroExpView(this, container, state);
     }
 
     public rustHirViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof RustHirView>[2]
+        state: ConstructorParameters<typeof RustHirView>[2],
     ): RustHirView {
         return new RustHirView(this, container, state);
     }
 
     public haskellCoreViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof HaskellCoreView>[2]
+        state: ConstructorParameters<typeof HaskellCoreView>[2],
     ): HaskellCoreView {
         return new HaskellCoreView(this, container, state);
     }
 
     public haskellStgViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof HaskellStgView>[2]
+        state: ConstructorParameters<typeof HaskellStgView>[2],
     ): HaskellStgView {
         return new HaskellStgView(this, container, state);
     }
     public haskellCmmViewFactory(
         container: GoldenLayout.Container,
-        state: ConstructorParameters<typeof HaskellCmmView>[2]
+        state: ConstructorParameters<typeof HaskellCmmView>[2],
     ): HaskellCmmView {
         return new HaskellCmmView(this, container, state);
     }

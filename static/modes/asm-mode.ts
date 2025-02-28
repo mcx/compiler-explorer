@@ -21,11 +21,9 @@
 // CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
+import * as monaco from 'monaco-editor';
 
-'use strict';
-const monaco = require('monaco-editor');
-
-function definition() {
+function definition(): monaco.languages.IMonarchLanguage {
     return {
         // Set defaultToken to invalid to see what you do not tokenize yet
         defaultToken: 'invalid',
@@ -41,14 +39,22 @@ function definition() {
             root: [
                 // Error document
                 [/^<.*>$/, {token: 'annotation'}],
-                // Label definition
-                [/^[.a-zA-Z0-9_$?@].*:/, {token: 'type.identifier'}],
+                // inline comments
+                [/\/\*/, 'comment', '@comment'],
+                // Label definition (anything looking like a label, followed by anything that's not valid in a demangled
+                // identifier, until we get to a colon followed by any whitespace. This is to avoid finding the colon in
+                // a scoped (blah::foo) identifier.
+                [/^[.a-zA-Z0-9_$?@][^#;/]*:(?=\s)/, {token: 'type.identifier'}],
                 // Label definition (quoted)
                 [/^"([^"\\]|\\.)*":/, {token: 'type.identifier'}],
                 // Label definition (ARM style)
                 [/^\s*[|][^|]*[|]/, {token: 'type.identifier'}],
-                // Label definition (CL style)
-                [/^\s*[.a-zA-Z0-9_$|]*\s+(PROC|ENDP|DB|DD)/, {token: 'type.identifier', next: '@rest'}],
+                // Label definition (CL style). This is pretty hideous: we essentially take anything that ends in spaces
+                // followed by a definition (PROC, ENDP etc) and assume it's a label. That means we have to use
+                // backtracking and then a lookahead to ensure we don't consume the definition. As a nod to efficiency
+                // we assume the line has to start with a non-whitespace character before we go all back-tracky.
+                // See https://github.com/compiler-explorer/compiler-explorer/issues/1645 for examples.
+                [/^\S.*?(?=\s+(PROC|ENDP|D[BDWQ]))/, {token: 'type.identifier', next: '@rest'}],
                 // Constant definition
                 [/^[.a-zA-Z0-9_$?@][^=]*=/, {token: 'type.identifier'}],
                 // opcode
@@ -68,6 +74,11 @@ function definition() {
 
                 [/@registers/, 'variable.predefined'],
                 [/@intelOperators/, 'annotation'],
+                // inline comments
+                [/\/\*/, 'comment', '@comment'],
+                // CL style post-label definition.
+                [/PROC|ENDP|D[BDWQ]/, 'keyword'],
+
                 // brackets
                 [/[{}<>()[\]]/, '@brackets'],
 
@@ -155,4 +166,4 @@ const def = definition();
 monaco.languages.register({id: 'asm'});
 monaco.languages.setMonarchTokensProvider('asm', def);
 
-export = def;
+export default def;

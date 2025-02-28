@@ -22,8 +22,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {LanguageKey} from './languages.interfaces';
-import {ResultLine} from './resultline/resultline.interfaces';
+import {LanguageKey} from './languages.interfaces.js';
+import {ResultLine} from './resultline/resultline.interfaces.js';
 
 export type ToolTypeKey = 'independent' | 'postcompilation';
 
@@ -56,6 +56,9 @@ export enum ArtifactType {
     bbcdiskimage = 'bbcdiskimage',
     zxtape = 'zxtape',
     smsrom = 'smsrom',
+    timetrace = 'timetracejson',
+    c64prg = 'c64prg',
+    heaptracktxt = 'heaptracktxt',
 }
 
 export type Artifact = {
@@ -73,4 +76,6 @@ export type ToolResult = {
     stderr: ResultLine[];
     stdout: ResultLine[];
     artifact?: Artifact;
+    sourcechanged?: boolean;
+    newsource?: string;
 };

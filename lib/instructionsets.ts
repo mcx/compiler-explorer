@@ -22,14 +22,16 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+import {InstructionSet} from '../types/instructionsets.js';
+
 type InstructionSetMethod = {
     target: string[];
     path: string[];
 };
 
 export class InstructionSets {
-    private defaultInstructionset = 'amd64';
-    private supported: Record<string, InstructionSetMethod> = {};
+    private defaultInstructionset: InstructionSet = 'amd64';
+    private supported: Record<InstructionSet, InstructionSetMethod>;
 
     constructor() {
         this.supported = {
@@ -41,25 +43,73 @@ export class InstructionSets {
                 target: ['arm'],
                 path: ['/arm-'],
             },
-            riscv64: {
-                target: ['rv64'],
-                path: ['/riscv64-'],
-            },
-            riscv32: {
-                target: ['rv32'],
-                path: ['/riscv32-'],
-            },
             avr: {
                 target: ['avr'],
                 path: ['/avr-'],
+            },
+            c6x: {
+                target: ['c6x'],
+                path: ['/tic6x-'],
+            },
+            dex: {
+                target: [],
+                path: [],
+            },
+            ebpf: {
+                target: ['bpf'],
+                path: ['/bpf-'],
+            },
+            kvx: {
+                target: ['kvx'],
+                path: ['/kvx-', '/k1-'],
+            },
+            loongarch: {
+                target: ['loongarch'],
+                path: ['/loongarch64-'],
+            },
+            m68k: {
+                target: ['m68k'],
+                path: ['/m68k-'],
+            },
+            mips: {
+                target: ['mips'],
+                path: ['/mips', '/mipsel-', '/mips64el-', '/mips64-', '/nanomips-'],
+            },
+            mrisc32: {
+                target: ['mrisc32'],
+                path: [],
             },
             msp430: {
                 target: ['msp430'],
                 path: ['/msp430-'],
             },
-            mips: {
-                target: ['mips'],
-                path: ['/mips-'],
+            powerpc: {
+                target: ['powerpc', 'ppc64', 'ppc'],
+                path: ['/powerpc-', '/powerpc64-', '/powerpc64le-'],
+            },
+            riscv64: {
+                target: ['rv64', 'riscv64'],
+                path: ['/riscv64-'],
+            },
+            riscv32: {
+                target: ['rv32', 'riscv32'],
+                path: ['/riscv32-'],
+            },
+            sh: {
+                target: ['sh'],
+                path: ['/sh-'],
+            },
+            sparc: {
+                target: ['sparc', 'sparc64'],
+                path: ['/sparc-', '/sparc64-'],
+            },
+            s390x: {
+                target: ['s390x'],
+                path: ['/s390x-'],
+            },
+            vax: {
+                target: ['vax'],
+                path: ['/vax-'],
             },
             wasm32: {
                 target: ['wasm32'],
@@ -69,46 +119,114 @@ export class InstructionSets {
                 target: ['wasm64'],
                 path: [],
             },
+            xtensa: {
+                target: ['xtensa'],
+                path: ['/xtensa-'],
+            },
+            z80: {
+                target: ['z80'],
+                path: [],
+            },
             6502: {
                 target: [],
                 path: [],
             },
-            powerpc64le: {
-                target: ['powerpc64le'],
-                path: ['/powerpc64le-'],
+            wdc65c816: {
+                target: [],
+                path: [],
             },
-            powerpc64: {
-                target: ['powerpc64'],
-                path: ['/powerpc64-'],
+            core: {
+                target: [],
+                path: [],
+            },
+            java: {
+                target: [],
+                path: [],
+            },
+            llvm: {
+                target: [],
+                path: [],
+            },
+            python: {
+                target: [],
+                path: [],
+            },
+            ptx: {
+                target: [],
+                path: [],
+            },
+            x86: {
+                target: [],
+                path: [],
+            },
+            amd64: {
+                target: ['x86_64'],
+                path: ['/x86_64'],
+            },
+            evm: {
+                target: [],
+                path: [],
+            },
+            eravm: {
+                target: [],
+                path: [],
+            },
+            mos6502: {
+                target: [],
+                path: [],
+            },
+            sass: {
+                target: [],
+                path: [],
+            },
+            beam: {
+                target: [],
+                path: [],
+            },
+            hook: {
+                target: [],
+                path: [],
+            },
+            spirv: {
+                target: [],
+                path: [],
             },
         };
     }
 
-    async getCompilerInstructionSetHint(compilerArch: string | boolean, exe: string): Promise<string> {
-        return new Promise(resolve => {
-            if (compilerArch && typeof compilerArch === 'string') {
-                for (const instructionSet in this.supported) {
-                    const method = this.supported[instructionSet];
-                    for (const target of method.target) {
-                        if (compilerArch.includes(target)) {
-                            resolve(instructionSet);
-                            return;
-                        }
-                    }
-                }
-            } else {
-                for (const instructionSet in this.supported) {
-                    const method = this.supported[instructionSet];
-                    for (const path of method.path) {
-                        if (exe.includes(path)) {
-                            resolve(instructionSet);
-                            return;
-                        }
+    // Return the first spelling of the target for the instruction set,
+    // or null if data is missing from the 'supported' table.
+    getInstructionSetTarget(instructionSet: InstructionSet): string | null {
+        if (!(instructionSet in this.supported)) return null;
+        if (this.supported[instructionSet].target.length === 0) return null;
+        return this.supported[instructionSet].target[0];
+    }
+
+    getCompilerInstructionSetHint(compilerArch: string | boolean, exe?: string): InstructionSet {
+        if (compilerArch && typeof compilerArch === 'string') {
+            for (const [instructionSet, method] of Object.entries(this.supported) as [
+                InstructionSet,
+                InstructionSetMethod,
+            ][]) {
+                for (const target of method.target) {
+                    if (compilerArch.includes(target)) {
+                        return instructionSet;
                     }
                 }
             }
+        } else {
+            for (const [instructionSet, method] of Object.entries(this.supported) as [
+                InstructionSet,
+                InstructionSetMethod,
+            ][]) {
+                for (const path of method.path) {
+                    if (exe?.includes(path)) {
+                        return instructionSet;
+                    }
+                }
+            }
+        }
 
-            resolve(this.defaultInstructionset);
-        });
+        return this.defaultInstructionset;
     }
 }

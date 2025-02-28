@@ -21,11 +21,9 @@
 // CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
+import * as monaco from 'monaco-editor';
 
-'use strict';
-const monaco = require('monaco-editor');
-
-export function definition() {
+export function definition(): monaco.languages.IMonarchLanguage {
     return {
         defaultToken: 'invalid',
         escapes: /\\(?:[abfnrtv\\"']|x[0-9A-Fa-f]{1,4}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8})/,
@@ -34,7 +32,7 @@ export function definition() {
                 [/%[0-9]+/, 'variable.predefined'],
                 [/%[a-zA-Z_][a-zA-Z0-9_]*/, 'variable'],
                 [/;.*$/, 'comment'],
-                [/Op[A-Z][a-zA-Z]*/, 'keyword'],
+                [/[A-Z][a-zA-Z]*/, 'keyword'],
                 [/\d+/, 'number'],
                 [/"([^"\\]|\\.)*$/, 'string.invalid'], // non-terminated string
                 [/"/, 'string', '@string'], // push to string state
@@ -49,7 +47,14 @@ export function definition() {
     };
 }
 
+function configuration(): monaco.languages.LanguageConfiguration {
+    return {
+        comments: {
+            lineComment: ';',
+        },
+    };
+}
+
 monaco.languages.register({id: 'spirv'});
 monaco.languages.setMonarchTokensProvider('spirv', definition());
-
-export {};
+monaco.languages.setLanguageConfiguration('spirv', configuration());
